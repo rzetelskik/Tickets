@@ -12,7 +12,7 @@ using ValidTime = unsigned long long;
 using Ticket = std::tuple<std::string, Price, ValidTime>;
 using TicketSet = std::set<Ticket>;
 using StopNameSet = std::unordered_set<std::string>;
-using StopTime = unsigned long;
+using StopTime = unsigned long; //TODO: change type?
 using Stop = std::pair<const std::string&, StopTime>;
 using Route = std::vector<Stop>;
 using LineNum = unsigned long long;
@@ -33,8 +33,9 @@ enum RequestType {
 };
 
 using ParseResult = std::pair<RequestType, Request>;
+using CountResult = std::variant<StopTime, std::string, bool>; //TODO: change error variant?
 
-
+//region Parsing
 RequestType getRequestType(const std::string& line) {
     if (line.empty()) {
         return IGNORE;
@@ -112,8 +113,6 @@ ParseResult parseAddTicket(const std::string& line) {
     return ParseResult(ADD_TICKET, Request(addTicket));
 }
 
-
-
 ParseResult parseQuery(const std::string& line) {
     std::regex rgx(R"(^\?((?: [a-zA-Z^_]+ \d+)+) ([a-zA-Z^_]+)$)");
     std::smatch match;
@@ -140,19 +139,84 @@ ParseResult parseQuery(const std::string& line) {
 
 ParseResult parseInputLine(const std::string& line) {
     switch (getRequestType(line)) {
-        case ADD_ROUTE:
-            return parseAddRoute(line);
-        case ADD_TICKET:
-            return parseAddTicket(line);
-        case QUERY:
-            return parseQuery(line);
-        case IGNORE:
-            return parseIgnore();
-        case ERROR:
-            return parseError();
+      case ADD_ROUTE:
+        return parseAddRoute(line);
+      case ADD_TICKET:
+        return parseAddTicket(line);
+      case QUERY:
+        return parseQuery(line);
+      case IGNORE:
+        return parseIgnore();
+      case ERROR:
+        return parseError();
+    }
+
+    return parseError();
 }
+//endregion
+
+//region Processing
+CountResult countTime(const Query& tour, const Timetable& timeTable) {
+  StopTime arrivalTime = 0;
+  StopTime startTime = 0;
+  StopTime endTime = 0;
+
+  for(std::size_t i = 0; i < tour.size() - 1; i++) {
+    auto& current = tour[i];
+    auto& next = tour[i + 1];
+
+    const auto& currentName = current.first;
+    const auto& line = timeTable.at(current.second);
+    const auto& nextName = next.first;
+
+    bool started = false;
+    bool ended = false;
+
+    for(auto& stop: line) {
+      if(!started) {
+        if(currentName == stop.first) {
+          if(i == 0) {
+            startTime = stop.second;
+          }
+          else if(arrivalTime != stop.second) {
+            if(arrivalTime > stop.second) {
+              return CountResult(false);
+            }
+            else {
+              return CountResult(stop.first);
+            }
+          }
+
+          arrivalTime = stop.second;
+          started = true;
+        }
+      }
+      else {
+        if(nextName == stop.first) {
+          ended = true;
+
+          if(i == tour.size() - 2) {
+            endTime = stop.second;
+          }
+
+          arrivalTime = stop.second;
+          break;
+        }
+      }
+    }
+
+    if(!started || !ended) {
+      CountResult(false);
+    }
+  }
+
+  return CountResult(endTime - startTime);
+}
+//endregion
+
 
 int main() {
+    /* PARSING TEST
     std::string buffer;
     std::string debug_enum_array[5] = { "ADD_ROUTE", "ADD_TICKET", "QUERY", "IGNORE", "ERROR"};
 
@@ -160,5 +224,99 @@ int main() {
         ParseResult parseResult = parseInputLine(buffer);
         std::cout << debug_enum_array[parseResult.first] << std::endl;
     }
+    */
+
+  StopNameSet names;
+  Route r;
+
+  std::string n1("name1");
+  names.insert(n1);
+  Stop s1 = Stop(n1, 10);
+
+  std::string n2("name2");
+  names.insert(n2);
+  Stop s2 = Stop(n2, 20);
+
+  std::string n3("name3");
+  names.insert(n3);
+  Stop s3 = Stop(n3, 30);
+
+  std::string n4("name4");
+  names.insert(n4);
+  Stop s4 = Stop(n4, 40);
+
+  std::string n5("name5");
+  names.insert(n5);
+  Stop s5 = Stop(n5, 50);
+
+  std::string n6("name6");
+  names.insert(n6);
+  Stop s6 = Stop(n6, 60);
+
+  r.push_back(s1);
+  r.push_back(s2);
+  r.push_back(s3);
+  r.push_back(s4);
+  r.push_back(s5);
+  r.push_back(s6);
+
+
+
+
+  std::string na1("line2_1");
+  names.insert(na1);
+  Stop ns1(na1, 15);
+
+  Stop ns2(n4, 40);
+
+  std::string na3("line2_3");
+  names.insert(na3);
+  Stop ns3(na3, 44);
+
+  std::string na4("line2_4");
+  names.insert(na4);
+  Stop ns4(na4, 58);
+
+  Stop ns5(n6, 70);
+
+  Route r2;
+  r2.push_back(ns1);
+  r2.push_back(ns2);
+  r2.push_back(ns3);
+  r2.push_back(ns4);
+  r2.push_back(ns5);
+
+  Timetable tt;
+  tt.insert({3, r});
+  tt.insert({5, r2});
+
+
+  QueryStop ts1("name2", 3);
+  QueryStop ts2("name6", 0);
+  Query tour;
+
+  tour.push_back(ts1);
+  tour.push_back(ts2);
+
+
+  QueryStop nts1("name1", 3);
+  QueryStop nts2("name4", 5);
+  QueryStop nts3("line2_4", 0);
+
+  Query tur2;
+  tur2.push_back(nts1);
+  tur2.push_back(nts2);
+  tur2.push_back(nts3);
+
+
+  auto res2 = countTime(tur2, tt);
+
+  std::cout << res2.index() << std::endl;
+
+  if(res2.index() == 0) {
+    std::cout << std::get<StopTime>(res2);
+  }
+
+
     return 0;
 }
