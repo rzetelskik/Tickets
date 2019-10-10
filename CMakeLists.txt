@@ -12,4 +12,4 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_COMPILER "g++")
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -O2 -std=c++17")
 
-add_executable(kasa kasa.cc)
+add_executable(kasa tmp.cc)
