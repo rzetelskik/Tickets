@@ -150,7 +150,6 @@ ParseResult parseInputLine(const std::string& line) {
             return parseIgnore();
         case ERROR:
             return parseError();
-    }
 }
 
 int main() {
