@@ -23,17 +23,17 @@ using Tour = std::vector<TourStop>;
  */
 using FindingResult = std::variant<uint, std::string, bool>;
 
-FindingResult countTime(const Tour& tour, const Timetable& tTable) {
+FindingResult countTime(const Tour& tour, const Timetable& timeTable) {
   uint arrivalTime = 0;
   uint startTime = 0;
   uint endTime = 0;
 
   for(std::size_t i = 0; i < tour.size() - 1; i++) {
-    auto& actual = tour[i];
+    auto& current = tour[i];
     auto& next = tour[i + 1];
 
-    const auto& actualName = actual.first;
-    const auto& line = tTable.at(actual.second);
+    const auto& currentName = current.first;
+    const auto& line = timeTable.at(current.second);
     const auto& nextName = next.first;
 
     bool started = false;
@@ -41,9 +41,7 @@ FindingResult countTime(const Tour& tour, const Timetable& tTable) {
 
     for(auto& stop: line) {
       if(!started) {
-        if(actualName != stop.first)
-          continue;
-        else {
+        if(currentName == stop.first) {
           if(i == 0) {
             startTime = stop.second;
           }
@@ -55,19 +53,19 @@ FindingResult countTime(const Tour& tour, const Timetable& tTable) {
               return FindingResult(stop.first);
             }
           }
+
           arrivalTime = stop.second;
           started = true;
         }
       }
       else {
-        if(nextName != stop.first)
-          continue;
-        else {
+        if(nextName == stop.first) {
           ended = true;
 
           if(i == tour.size() - 2) {
             endTime = stop.second;
           }
+
           arrivalTime = stop.second;
           break;
         }
