@@ -9,21 +9,18 @@
 
 using Price = unsigned long;
 using ValidTime = unsigned long long;
-using Ticket = std::tuple<std::string, Price, ValidTime>;
-auto ticketCmp = [](const Ticket& t1, const Ticket& t2) { return std::get<1>(t1) < std::get<1>(t2);}; //TODO no tutaj troche slabo, jakis lepszy pomysl?
-using TicketSet = std::set<Ticket, decltype(ticketCmp)>;
-using TicketNameSet = std::unordered_set<std::string>;
+using TicketMap = std::unordered_map<std::string, Price>;
+using TicketSortedMap = std::map<std::pair<Price, std::string>, std::pair<Price, ValidTime>>;
 using StopNameSet = std::unordered_set<std::string>;
 using StopTime = unsigned long; //TODO: change type?
-using Stop = std::pair<const std::string&, StopTime>;
-using Route = std::vector<Stop>;
+using Route = std::map<std::string, StopTime>;
 using LineNum = unsigned long long;
 using Timetable = std::unordered_map<LineNum, Route>;
-using RouteStop = std::pair<std::string, StopTime>;
-using AddRoute = std::pair<LineNum, std::vector<RouteStop>>;
+using AddRoute = std::pair<LineNum, Route>;
+using AddTicket = std::pair<std::string, std::pair<Price, ValidTime>>;
 using QueryStop = std::pair<std::string, StopTime>;
 using Query = std::vector<QueryStop>;
-using Request = std::variant<AddRoute, Ticket, Query>;
+using Request = std::variant<AddRoute, AddTicket, Query>;
 
 enum RequestType {
     ADD_ROUTE,
@@ -76,8 +73,8 @@ bool isStopTimeCorrect(StopTime stopTime, StopTime prevStopTime) {
     return (stopTime > prevStopTime && stopTime >= 355 && stopTime <= 1281);
 }
 
-bool isStopNameRepeated(const std::string& stopName, const std::unordered_set<std::string>& visitedStops) {
-    return (visitedStops.find(stopName) != visitedStops.end());
+bool isStopRepeated(const std::string& stopName, const Route& route) {
+    return (route.find(stopName) != route.end());
 }
 
 ParseResult parseAddRoute(const std::string& line) {
@@ -89,8 +86,7 @@ ParseResult parseAddRoute(const std::string& line) {
         return parseError();
     }
     LineNum lineNum = stoull(match.str(1));
-    std::vector<RouteStop> routeStops;
-    std::unordered_set<std::string> visitedStopsNames;
+    Route route;
     StopTime prevStopTime = 0;
     std::string iterStr = match.str(2);
     std::regex iterRgx(R"( ([5-9]|1\d|2[0-1])\:([0-5]\d) ([a-zA-Z^_]+))");
@@ -99,7 +95,7 @@ ParseResult parseAddRoute(const std::string& line) {
         std::smatch iterMatch = *it;
 
         const std::string& stopName = iterMatch.str(3);
-        if (isStopNameRepeated(stopName, visitedStopsNames)) {
+        if (isStopRepeated(stopName, route)) {
             return parseError();
         }
 
@@ -108,14 +104,12 @@ ParseResult parseAddRoute(const std::string& line) {
             return parseError();
         }
 
-        RouteStop routeStop = {stopName, stopTime};
-        routeStops.push_back(routeStop);
+        route.insert({stopName, stopTime});
 
         prevStopTime = stopTime;
-        visitedStopsNames.insert(stopName);
     }
 
-    return ParseResult(ADD_ROUTE, AddRoute(lineNum, routeStops));
+    return ParseResult(ADD_ROUTE, AddRoute(lineNum, route));
 }
 
 ParseResult parseAddTicket(const std::string& line) {
@@ -134,7 +128,7 @@ ParseResult parseAddTicket(const std::string& line) {
     Price fullPrice = 100 * integerPart + decimalPart;
     ValidTime validTime = std::stoull(match.str(4));
 
-    Ticket addTicket = {name, fullPrice, validTime};
+    AddTicket addTicket = {name, {fullPrice, validTime}};
     return ParseResult(ADD_TICKET, Request(addTicket));
 }
 
@@ -181,6 +175,16 @@ ParseResult parseInputLine(const std::string& line) {
 //endregion
 
 //region Processing
+
+std::pair<Price, ValidTime> getTicketDataByName(const std::string& name, const TicketMap& ticketMap,
+        const TicketSortedMap& ticketSortedMap) {
+    //TODO tu sie moze wyjebac cos w sumie
+    Price price = ticketMap.find(name)->second;
+
+    return ticketSortedMap.find({price, name})->second;
+}
+
+//TODO to nie bedzie zwracalo processResult prawdopodobnie
 ProcessResult countTime(const Query& tour, const Timetable& timeTable) {
     StopTime arrivalTime = 0;
     StopTime startTime = 0;
@@ -245,52 +249,52 @@ bool isLineRepeated(const LineNum& lineNum, const Timetable& timetable) {
     return (timetable.find(lineNum) != timetable.end());
 }
 
-ProcessResult processAddRoute(const AddRoute& addRoute, StopNameSet& stopNameSet,
-        Timetable& timetable) {
+ProcessResult processAddRoute(const AddRoute& addRoute, Timetable& timetable) {
     if (isLineRepeated(addRoute.first, timetable)) {
         return processError();
     }
-    
-    Route newRoute;
-    for (const RouteStop& curr: addRoute.second) {
-        auto ret = stopNameSet.insert(curr.first);
-        const std::string& stopName = *ret.first;
 
-        newRoute.push_back(std::make_pair(stopName, curr.second));
-    }
-
-    timetable.insert({addRoute.first, newRoute});
+    timetable.insert(addRoute);
 
     return ProcessResult(NO_RESPONSE, std::nullopt);
 }
 
-bool isTicketNameRepeated(const std::string& ticketName, const TicketNameSet& ticketNameSet) {
-    return (ticketNameSet.find(ticketName) != ticketNameSet.end());
+bool isTicketNameRepeated(const std::string& ticketName, const TicketMap& ticketMap) {
+    return (ticketMap.find(ticketName) != ticketMap.end());
 }
 
-ProcessResult processAddTicket(const Ticket& ticket, TicketNameSet& ticketNameSet, TicketSet& ticketSet) {
-    const std::string& ticketName = std::get<0>(ticket);
-    if (isTicketNameRepeated(ticketName, ticketNameSet)) {
+void insertTicket(const AddTicket& addTicket, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap) {
+    const std::string& name = addTicket.first;
+    Price price = addTicket.second.first;
+    ValidTime validTime = addTicket.second.second;
+
+    ticketMap.insert({name, price});
+    ticketSortedMap.insert({{price, name}, {price, validTime}});
+}
+
+ProcessResult processAddTicket(const AddTicket& addTicket, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap) {
+    const std::string& ticketName = std::get<0>(addTicket);
+    if (isTicketNameRepeated(ticketName, ticketMap)) {
         return processError();
     }
 
-    ticketNameSet.insert(ticketName);
-    ticketSet.insert(ticket);
+    insertTicket(addTicket, ticketMap, ticketSortedMap);
 
     return processNoResponse();
 }
 
 ProcessResult processQuery() {
-    return processError();
+    std::cout << "processQuery" << std::endl;
+    return processNoResponse();
 }
 
-ProcessResult processRequest(const ParseResult& parseResult, TicketNameSet& ticketNameSet, TicketSet& ticketSet,
-        StopNameSet& stopNameSet, Timetable& timetable) {
+ProcessResult processRequest(const ParseResult& parseResult, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap,
+        Timetable& timetable) {
     switch (parseResult.first) {
         case ADD_ROUTE:
-            return processAddRoute(std::get<AddRoute>(parseResult.second.value()), stopNameSet, timetable);
+            return processAddRoute(std::get<AddRoute>(parseResult.second.value()), timetable);
         case ADD_TICKET:
-            return processAddTicket(std::get<Ticket>(parseResult.second.value()), ticketNameSet, ticketSet);
+            return processAddTicket(std::get<AddTicket>(parseResult.second.value()), ticketMap, ticketSortedMap);
         case QUERY:
             return processQuery();
         case IGNORE:
@@ -303,20 +307,54 @@ ProcessResult processRequest(const ParseResult& parseResult, TicketNameSet& tick
 
 //endregion
 
+void printFound(const std::vector<std::string>& tickets) {
+    std::cout << '!';
+    for (auto& ticket: tickets) {
+        std::cout << ticket;
+    }
+    std::cout << std::endl;
+}
+
+void printWait(const std::string& stop) {
+    std::cout << ":-(" << stop << std::endl;
+}
+
+void printNotFound() {
+    std::cout << ":-|" << std::endl;
+}
+
+void printError(const std::string& inputLine, unsigned int lineCounter) {
+    std::cerr << "Error in line " << lineCounter << ": " << inputLine << std::endl;
+}
+
+void printOutput(const ProcessResult& processResult, const std::string& inputLine, unsigned int lineCounter) {
+    switch(processResult.first) {
+        case FOUND:
+            return printFound(std::get<std::vector<std::string>>(processResult.second.value()));
+        case WAIT:
+            return printWait(std::get<std::string>(processResult.second.value()));
+        case NOT_FOUND:
+            return printNotFound();
+        case NO_RESPONSE:
+            break;
+        case ERROR_RESP:
+            return printError(inputLine, lineCounter);
+    }
+}
 
 int main() {
-    TicketSet ticketSet(ticketCmp); //TODO trzeba to ogarnac, usunac using? i sprawdzic czy to sortowanie wgl dziala
-    TicketNameSet ticketNameSet;
-    StopNameSet stopNameSet;
+    TicketMap ticketMap;
+    TicketSortedMap ticketSortedMap;
     Timetable timetable;
 
-    unsigned int counter = 1;
+    unsigned int lineCounter = 1;
     std::string buffer;
 
     while(std::getline(std::cin, buffer)) {
         ParseResult parseResult = parseInputLine(buffer);
-        ProcessResult processResult = processRequest(parseResult, ticketNameSet, ticketSet, stopNameSet, timetable);
-        counter++;
+        ProcessResult processResult = processRequest(parseResult, ticketMap, ticketSortedMap, timetable);
+        printOutput(processResult, buffer, lineCounter);
+        lineCounter++;
     }
 
 
