@@ -199,39 +199,32 @@ ProcessResult countTime(const Query& tour, const Timetable& timeTable) {
         const auto& line = timeTable.at(current.second);
         const auto& nextName = next.first;
 
-        bool started = false;
-        bool ended = false;
+        auto startStop = line.find(currentName);
+        auto endStop = line.find(nextName);
 
-        for (auto& stop: line) {
-            if (!started) {
-                if (currentName == stop.first) {
-                    if (i == 0) {
-                        startTime = stop.second;
-                    } else if (arrivalTime != stop.second) {
-                        if (arrivalTime > stop.second) {
-                            return ProcessResult(NOT_FOUND, std::nullopt);
-                        } else {
-                            return ProcessResult(WAIT, Response(stop.first));
-                        }
-                    }
-
-                    arrivalTime = stop.second;
-                    started = true;
-                }
-            } else if (nextName == stop.first) {
-                ended = true;
-
-                if (i == tour.size() - 2) {
-                    endTime = stop.second;
-                }
-
-                arrivalTime = stop.second;
-                break;
+        if(startStop == line.end() || endStop == line.end()) {
+            return ProcessResult(NOT_FOUND, std::nullopt);
+        }
+        else if(startStop->second > endStop->second) {
+            return ProcessResult(NOT_FOUND, std::nullopt);
+        }
+        else if(i != 0 && arrivalTime != startStop->second) {
+            if(arrivalTime < startStop->second) {
+                return ProcessResult(WAIT, Response(startStop->first));
+            }
+            else {
+                return ProcessResult(NOT_FOUND, std::nullopt);
             }
         }
+        else {
+            arrivalTime = endStop->second;
 
-        if(!started || !ended) {
-            return ProcessResult(NOT_FOUND, std::nullopt);
+            if(i == 0) {
+                startTime = startStop->second;
+            }
+            if(i == tour.size() - 2) {
+                endTime = endStop->second;
+            }
         }
     }
 
