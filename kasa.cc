@@ -46,16 +46,16 @@ using ProcessResult = std::pair<ResponseType, std::optional<Response>>;
 
 //region Parsing
 RequestType getRequestType(const std::string& line) {
-    if(line.empty()) {
+    if (line.empty()) {
         return IGNORE;
     }
     char c = line.at(0);
 
-    if(isdigit(c)) {
+    if (isdigit(c)) {
         return ADD_ROUTE;
-    } else if(isalpha(c) || isspace(c)) {
+    } else if (isalpha(c) || isspace(c)) {
         return ADD_TICKET;
-    } else if(c == '?') {
+    } else if (c == '?') {
         return QUERY;
     } else {
         return ERROR_REQ;
@@ -83,7 +83,7 @@ ParseResult parseAddRoute(const std::string& line) {
     std::smatch match;
 
     //TODO exceptions
-    if(!std::regex_match(line, match, rgx)) {
+    if (!std::regex_match(line, match, rgx)) {
         return parseError();
     }
     LineNum lineNum = stoull(match.str(1));
@@ -92,7 +92,7 @@ ParseResult parseAddRoute(const std::string& line) {
     std::string iterStr = match.str(2);
     std::regex iterRgx(R"( ([5-9]|1\d|2[0-1])\:([0-5]\d) ([a-zA-Z^_]+))");
 
-    for(auto it = std::sregex_iterator(iterStr.begin(), iterStr.end(), iterRgx); it != std::sregex_iterator(); ++it) {
+    for (auto it = std::sregex_iterator(iterStr.begin(), iterStr.end(), iterRgx); it != std::sregex_iterator(); ++it) {
         std::smatch iterMatch = *it;
 
         const std::string& stopName = iterMatch.str(3);
@@ -101,7 +101,7 @@ ParseResult parseAddRoute(const std::string& line) {
         }
 
         StopTime stopTime = 60 * stoul(iterMatch.str(1)) + stoul(iterMatch.str(2));
-        if(!isStopTimeCorrect(stopTime, prevStopTime)) {
+        if (!isStopTimeCorrect(stopTime, prevStopTime)) {
             return parseError();
         }
 
@@ -146,13 +146,13 @@ ParseResult parseQuery(const std::string& line) {
     std::smatch match;
 
     //TODO exceptions
-    if(!std::regex_match(line, match, rgx)) {
+    if (!std::regex_match(line, match, rgx)) {
         return parseError();
     }
     Query query;
     std::regex iterRgx(R"( ([a-zA-Z^_]+) (\d+))");
     std::string iterStr = match.str(1);
-    for(auto it = std::sregex_iterator(iterStr.begin(), iterStr.end(), iterRgx); it != std::sregex_iterator(); ++it) {
+    for (auto it = std::sregex_iterator(iterStr.begin(), iterStr.end(), iterRgx); it != std::sregex_iterator(); ++it) {
         std::smatch iterMatch = *it;
 
         QueryStop queryStop = {iterMatch.str(1), std::stoul(iterMatch.str(2))};
@@ -166,7 +166,7 @@ ParseResult parseQuery(const std::string& line) {
 }
 
 ParseResult parseInputLine(const std::string& line) {
-    switch(getRequestType(line)) {
+    switch (getRequestType(line)) {
         case ADD_ROUTE:
             return parseAddRoute(line);
         case ADD_TICKET:
@@ -208,27 +208,23 @@ CountingResult countTime(const Query& tour, const Timetable& timeTable) {
         auto startStop = line.find(currentName);
         auto endStop = line.find(nextName);
 
-        if(startStop == line.end() || endStop == line.end()) {
+        if (startStop == line.end() || endStop == line.end()) {
             return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
-        }
-        else if(startStop->second > endStop->second) {
+        } else if (startStop->second > endStop->second) {
             return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
-        }
-        else if(i != 0 && arrivalTime != startStop->second) {
-            if(arrivalTime < startStop->second) {
+        } else if (i != 0 && arrivalTime != startStop->second) {
+            if (arrivalTime < startStop->second) {
                 return CountingResult(COUNTING_WAIT, CountingInfo(startStop->first));
-            }
-            else {
+            } else {
                 return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
             }
-        }
-        else {
+        } else {
             arrivalTime = endStop->second;
 
-            if(i == 0) {
+            if (i == 0) {
                 startTime = startStop->second;
             }
-            if(i == tour.size() - 2) {
+            if (i == tour.size() - 2) {
                 endTime = endStop->second;
             }
         }
@@ -248,7 +244,7 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
     std::string ticketC = empty;
 
     //tickets are sorted ascending by price
-    for(auto itA = tickets.cbegin(); itA != tickets.cend(); itA++) {
+    for (auto itA = tickets.cbegin(); itA != tickets.cend(); itA++) {
         const auto& keyA = itA->first;
 
         const auto& nameA = keyA.second;
@@ -258,8 +254,8 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
         unsigned long long currentPriceA = priceA;
         ValidTime currentTimeA = timeA;
 
-        if(currentTimeA >= totalTime) {
-            if(currentPriceA <= minPrice) {
+        if (currentTimeA >= totalTime) {
+            if (currentPriceA <= minPrice) {
                 minPrice = currentPriceA;
 
                 ticketA = nameA;
@@ -269,7 +265,7 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
             break;
         }
 
-        for(auto itB = itA; itB != tickets.cend(); itB++) {
+        for (auto itB = itA; itB != tickets.cend(); itB++) {
             const auto& keyB = itB->first;
 
             const auto& nameB = keyB.second;
@@ -279,8 +275,8 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
             unsigned long long currentPriceB = currentPriceA + priceB;
             ValidTime currentTimeB = currentTimeA + timeB;
 
-            if(currentTimeB >= totalTime) {
-                if(currentPriceB <= minPrice){
+            if (currentTimeB >= totalTime) {
+                if (currentPriceB <= minPrice) {
                     minPrice = currentPriceB;
 
                     ticketA = nameA;
@@ -290,7 +286,7 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
                 break;
             }
 
-            for(auto itC = itB; itC != tickets.cend(); itC++) {
+            for (auto itC = itB; itC != tickets.cend(); itC++) {
                 const auto& keyC = itC->first;
 
                 const auto& nameC = keyC.second;
@@ -300,8 +296,8 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
                 unsigned long long currentPriceC = currentPriceB + priceC;
                 ValidTime currentTimeC = currentTimeB + timeC;
 
-                if(currentTimeC >= totalTime) {
-                    if(currentPriceC <= minPrice){
+                if (currentTimeC >= totalTime) {
+                    if (currentPriceC <= minPrice) {
                         minPrice = currentPriceC;
 
                         ticketA = nameA;
@@ -317,11 +313,11 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
 
     SelectedTickets result;
 
-    if(!ticketA.empty())
+    if (!ticketA.empty())
         result.push_back(ticketA);
-    if(!ticketB.empty())
+    if (!ticketB.empty())
         result.push_back(ticketB);
-    if(!ticketC.empty())
+    if (!ticketC.empty())
         result.push_back(ticketC);
 
     return result;
@@ -377,15 +373,13 @@ ProcessResult processQuery(const Query& query, Timetable& timetable, TicketSorte
     auto countingResult = countTime(query, timetable);
 
     switch (countingResult.first) {
-        case COUNTING_FOUND:
-        {
+        case COUNTING_FOUND: {
             auto tickets = selectTickets(ticketMap, std::get<StopTime>(countingResult.second.value_or(0)));
 
-            if(!tickets.empty()) {
+            if (!tickets.empty()) {
                 ticketCounter += tickets.size();
                 return ProcessResult(FOUND, tickets);
-            }
-            else {
+            } else {
                 return ProcessResult(NOT_FOUND, std::nullopt);
             }
         }
@@ -399,7 +393,7 @@ ProcessResult processQuery(const Query& query, Timetable& timetable, TicketSorte
 }
 
 ProcessResult processRequest(const ParseResult& parseResult, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap,
-        Timetable& timetable, uint& ticketCounter) {
+                             Timetable& timetable, uint& ticketCounter) {
     switch (parseResult.first) {
         case ADD_ROUTE:
             return processAddRoute(std::get<AddRoute>(parseResult.second.value()), timetable);
@@ -421,7 +415,7 @@ void printFound(const std::vector<std::string>& tickets) {
     std::cout << '!';
     bool first = true;
     for (auto& ticket: tickets) {
-        if(!first)
+        if (!first)
             std::cout << "; ";
         else
             first = false;
@@ -444,7 +438,7 @@ void printError(const std::string& inputLine, unsigned int lineCounter) {
 }
 
 void printOutput(const ProcessResult& processResult, const std::string& inputLine, unsigned int lineCounter) {
-    switch(processResult.first) {
+    switch (processResult.first) {
         case FOUND:
             return printFound(std::get<std::vector<std::string>>(processResult.second.value()));
         case WAIT:
@@ -467,7 +461,7 @@ int main() {
     unsigned int lineCounter = 1;
     std::string buffer;
 
-    while(std::getline(std::cin, buffer)) {
+    while (std::getline(std::cin, buffer)) {
         ParseResult parseResult = parseInputLine(buffer);
         ProcessResult processResult = processRequest(parseResult, ticketMap, ticketSortedMap, timetable, ticketCounter);
         printOutput(processResult, buffer, lineCounter);
