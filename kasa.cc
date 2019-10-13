@@ -6,6 +6,7 @@
 #include <set>
 #include <variant>
 #include <regex>
+#include <climits>
 
 using Price = unsigned long;
 using ValidTime = unsigned long long;
@@ -237,6 +238,98 @@ ProcessResult countTime(const Query& tour, const Timetable& timeTable) {
     return ProcessResult(FOUND, Response(endTime - startTime));
 }
 
+std::vector<std::string&> selectTickets(const TicketSortedMap& tickets, StopTime totalTime) {
+    const uint MAX_TICKETS = 3;
+    std::string empty;
+    unsigned long long minPrice = ULLONG_MAX;
+
+    std::string& ticketA = empty;
+    std::string& ticketB = empty;
+    std::string& ticketC = empty;
+
+    //tickets are sorted ascending by price
+    for(auto itA = tickets.cbegin(); itA != tickets.cend(); itA++) {
+        const auto& keyA = itA->first;
+        const auto& valA = itA->second;
+
+        const auto& nameA = keyA.second;
+        auto priceA = keyA.first;
+        auto timeA = valA.second;
+
+        unsigned long long currentPriceA = priceA;
+        ValidTime currentTimeA = timeA;
+
+        if(currentTimeA >= totalTime) {
+            if(currentPriceA <= minPrice) {
+                minPrice = currentPriceA;
+
+                ticketA = nameA;
+                ticketB = empty;
+                ticketC = empty;
+            }
+            break;
+        }
+
+        for(auto itB = itA; itB != tickets.cend(); itB++) {
+            const auto& keyB = itB->first;
+            const auto& valB = itB->second;
+
+            const auto& nameB = keyB.second;
+            auto priceB = keyB.first;
+            auto timeB = valB.second;
+
+            unsigned long long currentPriceB = currentPriceA + priceB;
+            ValidTime currentTimeB = currentTimeA + timeB;
+
+            if(currentTimeB >= totalTime) {
+                if(currentPriceB <= minPrice){
+                    minPrice = currentPriceB;
+
+                    ticketA = nameA;
+                    ticketB = nameB;
+                    ticketC = empty;
+                }
+                break;
+            }
+
+            for(auto itC = itB; itC != tickets.cend(); itC++) {
+                const auto& keyC = itC->first;
+                const auto& valC = itC->second;
+
+                const auto& nameC = keyC.second;
+                auto priceC = keyC.first;
+                auto timeC = valC.second;
+
+                unsigned long long currentPriceC = currentPriceB + priceC;
+                ValidTime currentTimeC = currentTimeB + timeC;
+
+                if(currentTimeC >= totalTime) {
+                    if(currentPriceC <= minPrice){
+                        minPrice = currentPriceC;
+
+                        ticketA = nameA;
+                        ticketB = nameB;
+                        ticketC = nameC;
+                    }
+                    break;
+                }
+            }
+        }
+
+    }
+
+    std::vector<std::string&> result;
+
+    if(!ticketA.empty())
+        result.push_back(ticketA);
+    if(!ticketB.empty())
+        result.push_back(ticketB);
+    if(!ticketC.empty())
+        result.push_back(ticketC);
+
+    return  result;
+}
+
 ProcessResult processError() {
     return ProcessResult(ERROR_RESP, std::nullopt);
 }
@@ -283,9 +376,21 @@ ProcessResult processAddTicket(const AddTicket& addTicket, TicketMap& ticketMap,
     return processNoResponse();
 }
 
-ProcessResult processQuery() {
-    std::cout << "processQuery" << std::endl;
-    return processNoResponse();
+ProcessResult processQuery(const Query& query, Timetable& timetable, TicketSortedMap& ticketMap) {
+    auto totalTime = countTime(query, timetable);
+
+    switch (totalTime.first) {
+        case FOUND:
+            auto tickets = selectTickets(ticketMap, std::get<StopTime>(totalTime.second.value_or(0));
+            if(tickets.size() > 0) {
+                return ProcessResult(FOUND, tickets);
+            }
+            else {
+                return ProcessResult(NOT_FOUND, std::nullopt);
+            }
+        default:
+            return totalTime;
+    }
 }
 
 ProcessResult processRequest(const ParseResult& parseResult, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap,
@@ -296,7 +401,7 @@ ProcessResult processRequest(const ParseResult& parseResult, TicketMap& ticketMa
         case ADD_TICKET:
             return processAddTicket(std::get<AddTicket>(parseResult.second.value()), ticketMap, ticketSortedMap);
         case QUERY:
-            return processQuery();
+            return processQuery(std::get<Query>(parseResult.second.value()), timetable, ticketSortedMap);
         case IGNORE:
             return processNoResponse();
         default:
@@ -356,99 +461,6 @@ int main() {
         printOutput(processResult, buffer, lineCounter);
         lineCounter++;
     }
-
-
-//    // COUNTING TEST
-//
-//    StopNameSet names;
-//    Route r;
-//
-//    std::string n1("name1");
-//    names.insert(n1);
-//    Stop s1 = Stop(n1, 10);
-//
-//    std::string n2("name2");
-//    names.insert(n2);
-//    Stop s2 = Stop(n2, 20);
-//
-//    std::string n3("name3");
-//    names.insert(n3);
-//    Stop s3 = Stop(n3, 30);
-//
-//    std::string n4("name4");
-//    names.insert(n4);
-//    Stop s4 = Stop(n4, 40);
-//
-//    std::string n5("name5");
-//    names.insert(n5);
-//    Stop s5 = Stop(n5, 50);
-//
-//    std::string n6("name6");
-//    names.insert(n6);
-//    Stop s6 = Stop(n6, 60);
-//
-//    r.push_back(s1);
-//    r.push_back(s2);
-//    r.push_back(s3);
-//    r.push_back(s4);
-//    r.push_back(s5);
-//    r.push_back(s6);
-//
-//
-//    std::string na1("line2_1");
-//    names.insert(na1);
-//    Stop ns1(na1, 15);
-//
-//    Stop ns2(n4, 40);
-//
-//    std::string na3("line2_3");
-//    names.insert(na3);
-//    Stop ns3(na3, 44);
-//
-//    std::string na4("line2_4");
-//    names.insert(na4);
-//    Stop ns4(na4, 58);
-//
-//    Stop ns5(n6, 70);
-//
-//    Route r2;
-//    r2.push_back(ns1);
-//    r2.push_back(ns2);
-//    r2.push_back(ns3);
-//    r2.push_back(ns4);
-//    r2.push_back(ns5);
-//
-//    Timetable tt;
-//    tt.insert({3, r});
-//    tt.insert({5, r2});
-//
-//
-//    QueryStop ts1("name2", 3);
-//    QueryStop ts2("name6", 0);
-//    Query tour;
-//
-//    tour.push_back(ts1);
-//    tour.push_back(ts2);
-//
-//
-//    QueryStop nts1("name1", 3);
-//    QueryStop nts2("name4", 5);
-//    QueryStop nts3("line2_4", 0);
-//
-//    Query tur2;
-//    tur2.push_back(nts1);
-//    tur2.push_back(nts2);
-//    tur2.push_back(nts3);
-//
-//
-//    auto res2 = countTime(tur2, tt);
-//
-//    std::cout << res2.index() << std::endl;
-//
-//    if(res2.index() == 0) {
-//        std::cout << std::get<StopTime>(res2);
-//    }
-
 
     return 0;
 }
