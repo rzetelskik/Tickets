@@ -412,7 +412,13 @@ ProcessResult processRequest(const ParseResult& parseResult, TicketMap& ticketMa
 
 void printFound(const std::vector<std::string>& tickets) {
     std::cout << '!';
+    bool first = true;
     for (auto& ticket: tickets) {
+        if(!first)
+            std::cout << "; ";
+        else
+            first = false;
+
         std::cout << ticket;
     }
     std::cout << std::endl;
