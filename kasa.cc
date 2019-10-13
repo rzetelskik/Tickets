@@ -41,7 +41,7 @@ enum ResponseType {
     ERROR_RESP
 };
 
-using Response = std::variant<StopTime, std::string, std::vector<std::string>>;
+using Response = std::variant<std::string, std::vector<std::string>>;
 using ProcessResult = std::pair<ResponseType, std::optional<Response>>;
 
 //region Parsing
@@ -185,8 +185,15 @@ ParseResult parseInputLine(const std::string& line) {
     return ticketSortedMap.find({price, name})->second;
 }*/
 
-//TODO to nie bedzie zwracalo processResult prawdopodobnie
-ProcessResult countTime(const Query& tour, const Timetable& timeTable) {
+enum CountingResultType {
+    COUNTING_FOUND,
+    COUNTING_WAIT,
+    COUNTING_NOT_FOUND
+};
+using CountingInfo = std::variant<StopTime, std::string>;
+using CountingResult = std::pair<CountingResultType, std::optional<CountingInfo>>;
+
+CountingResult countTime(const Query& tour, const Timetable& timeTable) {
     StopTime arrivalTime = 0;
     StopTime startTime = 0;
     StopTime endTime = 0;
@@ -203,17 +210,17 @@ ProcessResult countTime(const Query& tour, const Timetable& timeTable) {
         auto endStop = line.find(nextName);
 
         if(startStop == line.end() || endStop == line.end()) {
-            return ProcessResult(NOT_FOUND, std::nullopt);
+            return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
         }
         else if(startStop->second > endStop->second) {
-            return ProcessResult(NOT_FOUND, std::nullopt);
+            return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
         }
         else if(i != 0 && arrivalTime != startStop->second) {
             if(arrivalTime < startStop->second) {
-                return ProcessResult(WAIT, Response(startStop->first));
+                return CountingResult(COUNTING_WAIT, CountingInfo(startStop->first));
             }
             else {
-                return ProcessResult(NOT_FOUND, std::nullopt);
+                return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
             }
         }
         else {
@@ -228,7 +235,7 @@ ProcessResult countTime(const Query& tour, const Timetable& timeTable) {
         }
     }
 
-    return ProcessResult(FOUND, Response(endTime - startTime));
+    return CountingResult(COUNTING_FOUND, CountingInfo(endTime - startTime));
 }
 
 std::vector<std::string> selectTickets(const TicketSortedMap& tickets, StopTime totalTime) {
@@ -367,12 +374,12 @@ ProcessResult processAddTicket(const AddTicket& addTicket, TicketMap& ticketMap,
 }
 
 ProcessResult processQuery(const Query& query, Timetable& timetable, TicketSortedMap& ticketMap) {
-    auto totalTime = countTime(query, timetable);
+    auto countingResult = countTime(query, timetable);
 
-    switch (totalTime.first) {
-        case FOUND:
+    switch (countingResult.first) {
+        case COUNTING_FOUND:
         {
-            auto tickets = selectTickets(ticketMap, std::get<StopTime>(totalTime.second.value_or(0)));
+            auto tickets = selectTickets(ticketMap, std::get<StopTime>(countingResult.second.value_or(0)));
 
             if(!tickets.empty()) {
                 return ProcessResult(FOUND, tickets);
@@ -381,11 +388,13 @@ ProcessResult processQuery(const Query& query, Timetable& timetable, TicketSorte
                 return ProcessResult(NOT_FOUND, std::nullopt);
             }
         }
-        default:
-            break;
+        case COUNTING_WAIT:
+            return ProcessResult(WAIT, Response(std::get<std::string>(countingResult.second.value())));
+        case COUNTING_NOT_FOUND:
+            return ProcessResult(NOT_FOUND, std::nullopt);
     }
 
-    return totalTime;
+    return ProcessResult(NOT_FOUND, std::nullopt);
 }
 
 ProcessResult processRequest(const ParseResult& parseResult, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap,
