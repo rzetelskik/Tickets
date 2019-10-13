@@ -11,7 +11,7 @@
 using Price = unsigned long;
 using ValidTime = unsigned long long;
 using TicketMap = std::unordered_map<std::string, Price>;
-using TicketSortedMap = std::map<std::pair<Price, std::string>, std::pair<Price, ValidTime>>;
+using TicketSortedMap = std::map<std::pair<Price, std::string>, ValidTime>;
 using StopNameSet = std::unordered_set<std::string>;
 using StopTime = unsigned long; //TODO: change type?
 using Route = std::map<std::string, StopTime>;
@@ -177,13 +177,13 @@ ParseResult parseInputLine(const std::string& line) {
 
 //region Processing
 
-std::pair<Price, ValidTime> getTicketDataByName(const std::string& name, const TicketMap& ticketMap,
+/*std::pair<Price, ValidTime> getTicketDataByName(const std::string& name, const TicketMap& ticketMap,
         const TicketSortedMap& ticketSortedMap) {
     //TODO tu sie moze wyjebac cos w sumie
     Price price = ticketMap.find(name)->second;
 
     return ticketSortedMap.find({price, name})->second;
-}
+}*/
 
 //TODO to nie bedzie zwracalo processResult prawdopodobnie
 ProcessResult countTime(const Query& tour, const Timetable& timeTable) {
@@ -243,11 +243,10 @@ std::vector<std::string> selectTickets(const TicketSortedMap& tickets, StopTime 
     //tickets are sorted ascending by price
     for(auto itA = tickets.cbegin(); itA != tickets.cend(); itA++) {
         const auto& keyA = itA->first;
-        const auto& valA = itA->second;
 
         const auto& nameA = keyA.second;
         auto priceA = keyA.first;
-        auto timeA = valA.second;
+        auto timeA = itA->second;
 
         unsigned long long currentPriceA = priceA;
         ValidTime currentTimeA = timeA;
@@ -265,11 +264,10 @@ std::vector<std::string> selectTickets(const TicketSortedMap& tickets, StopTime 
 
         for(auto itB = itA; itB != tickets.cend(); itB++) {
             const auto& keyB = itB->first;
-            const auto& valB = itB->second;
 
             const auto& nameB = keyB.second;
             auto priceB = keyB.first;
-            auto timeB = valB.second;
+            auto timeB = itB->second;
 
             unsigned long long currentPriceB = currentPriceA + priceB;
             ValidTime currentTimeB = currentTimeA + timeB;
@@ -287,11 +285,10 @@ std::vector<std::string> selectTickets(const TicketSortedMap& tickets, StopTime 
 
             for(auto itC = itB; itC != tickets.cend(); itC++) {
                 const auto& keyC = itC->first;
-                const auto& valC = itC->second;
 
                 const auto& nameC = keyC.second;
                 auto priceC = keyC.first;
-                auto timeC = valC.second;
+                auto timeC = itC->second;
 
                 unsigned long long currentPriceC = currentPriceB + priceC;
                 ValidTime currentTimeC = currentTimeB + timeC;
@@ -355,7 +352,7 @@ void insertTicket(const AddTicket& addTicket, TicketMap& ticketMap, TicketSorted
     ValidTime validTime = addTicket.second.second;
 
     ticketMap.insert({name, price});
-    ticketSortedMap.insert({{price, name}, {price, validTime}});
+    ticketSortedMap.insert({{price, name}, validTime});
 }
 
 ProcessResult processAddTicket(const AddTicket& addTicket, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap) {
