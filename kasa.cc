@@ -381,7 +381,7 @@ ProcessResult processAddTicket(const AddTicket& addTicket, TicketMap& ticketMap,
     return processNoResponse();
 }
 
-ProcessResult processQuery(const Query& query, Timetable& timetable, TicketSortedMap& ticketMap) {
+ProcessResult processQuery(const Query& query, Timetable& timetable, TicketSortedMap& ticketMap, uint& ticketCounter) {
     auto countingResult = countTime(query, timetable);
 
     switch (countingResult.first) {
@@ -390,6 +390,7 @@ ProcessResult processQuery(const Query& query, Timetable& timetable, TicketSorte
             auto tickets = selectTickets(ticketMap, std::get<StopTime>(countingResult.second.value_or(0)));
 
             if(!tickets.empty()) {
+                ticketCounter += tickets.size();
                 return ProcessResult(FOUND, tickets);
             }
             else {
@@ -406,14 +407,14 @@ ProcessResult processQuery(const Query& query, Timetable& timetable, TicketSorte
 }
 
 ProcessResult processRequest(const ParseResult& parseResult, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap,
-        Timetable& timetable) {
+        Timetable& timetable, uint& ticketCounter) {
     switch (parseResult.first) {
         case ADD_ROUTE:
             return processAddRoute(std::get<AddRoute>(parseResult.second.value()), timetable);
         case ADD_TICKET:
             return processAddTicket(std::get<AddTicket>(parseResult.second.value()), ticketMap, ticketSortedMap);
         case QUERY:
-            return processQuery(std::get<Query>(parseResult.second.value()), timetable, ticketSortedMap);
+            return processQuery(std::get<Query>(parseResult.second.value()), timetable, ticketSortedMap, ticketCounter);
         case IGNORE:
             return processNoResponse();
         default:
@@ -470,15 +471,17 @@ int main() {
     TicketSortedMap ticketSortedMap;
     Timetable timetable;
 
+    unsigned int ticketCounter = 0;
     unsigned int lineCounter = 1;
     std::string buffer;
 
     while(std::getline(std::cin, buffer)) {
         ParseResult parseResult = parseInputLine(buffer);
-        ProcessResult processResult = processRequest(parseResult, ticketMap, ticketSortedMap, timetable);
+        ProcessResult processResult = processRequest(parseResult, ticketMap, ticketSortedMap, timetable, ticketCounter);
         printOutput(processResult, buffer, lineCounter);
         lineCounter++;
     }
+    std::cout << ticketCounter << std::endl;
 
     return 0;
 }
