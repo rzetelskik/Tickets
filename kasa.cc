@@ -114,7 +114,7 @@ ParseResult parseAddRoute(const std::string& line) {
 }
 
 ParseResult parseAddTicket(const std::string& line) {
-    std::regex rgx(R"(^([a-zA-Z ]+) (\d+)\.(\d{2}) ([1-9]\d+)$)");
+    std::regex rgx(R"(^([a-zA-Z ]+) (\d+)\.(\d{2}) ([1-9]\d?+)$)");
     std::smatch match;
 
     if(!std::regex_match(line, match, rgx)) {
@@ -243,9 +243,9 @@ std::vector<std::string> selectTickets(const TicketSortedMap& tickets, StopTime 
     std::string empty;
     unsigned long long minPrice = ULLONG_MAX;
 
-    std::string& ticketA = empty;
-    std::string& ticketB = empty;
-    std::string& ticketC = empty;
+    std::string ticketA = empty;
+    std::string ticketB = empty;
+    std::string ticketC = empty;
 
     //tickets are sorted ascending by price
     for(auto itA = tickets.cbegin(); itA != tickets.cend(); itA++) {
