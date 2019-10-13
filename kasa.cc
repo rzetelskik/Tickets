@@ -113,11 +113,15 @@ ParseResult parseAddRoute(const std::string& line) {
     return ParseResult(ADD_ROUTE, AddRoute(lineNum, route));
 }
 
+bool isPriceCorrect(const Price& price) {
+    return (price > 0.00);
+}
+
 ParseResult parseAddTicket(const std::string& line) {
-    std::regex rgx(R"(^([a-zA-Z ]+) (\d+)\.(\d{2}) ([1-9]\d?+)$)");
+    std::regex rgx(R"(^([a-zA-Z ]+) (\d+)\.(\d{2}) ([1-9]\d*)$)");
     std::smatch match;
 
-    if(!std::regex_match(line, match, rgx)) {
+    if (!std::regex_match(line, match, rgx)) {
         return parseError();
     }
 
@@ -128,6 +132,10 @@ ParseResult parseAddTicket(const std::string& line) {
     Price decimalPart = std::stoul(match.str(3));
     Price fullPrice = 100 * integerPart + decimalPart;
     ValidTime validTime = std::stoull(match.str(4));
+
+    if (!isPriceCorrect(fullPrice)) {
+        return parseError();
+    }
 
     AddTicket addTicket = {name, {fullPrice, validTime}};
     return ParseResult(ADD_TICKET, Request(addTicket));
@@ -324,7 +332,7 @@ std::vector<std::string> selectTickets(const TicketSortedMap& tickets, StopTime 
     if(!ticketC.empty())
         result.push_back(ticketC);
 
-    return  result;
+    return result;
 }
 
 ProcessResult processError() {
