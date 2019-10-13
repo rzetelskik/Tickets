@@ -238,7 +238,7 @@ ProcessResult countTime(const Query& tour, const Timetable& timeTable) {
     return ProcessResult(FOUND, Response(endTime - startTime));
 }
 
-std::vector<std::string&> selectTickets(const TicketSortedMap& tickets, StopTime totalTime) {
+std::vector<std::string> selectTickets(const TicketSortedMap& tickets, StopTime totalTime) {
     const uint MAX_TICKETS = 3;
     std::string empty;
     unsigned long long minPrice = ULLONG_MAX;
@@ -318,7 +318,7 @@ std::vector<std::string&> selectTickets(const TicketSortedMap& tickets, StopTime
 
     }
 
-    std::vector<std::string&> result;
+    std::vector<std::string> result;
 
     if(!ticketA.empty())
         result.push_back(ticketA);
@@ -381,16 +381,21 @@ ProcessResult processQuery(const Query& query, Timetable& timetable, TicketSorte
 
     switch (totalTime.first) {
         case FOUND:
-            auto tickets = selectTickets(ticketMap, std::get<StopTime>(totalTime.second.value_or(0));
-            if(tickets.size() > 0) {
+        {
+            auto tickets = selectTickets(ticketMap, std::get<StopTime>(totalTime.second.value_or(0)));
+
+            if(!tickets.empty()) {
                 return ProcessResult(FOUND, tickets);
             }
             else {
                 return ProcessResult(NOT_FOUND, std::nullopt);
             }
+        }
         default:
-            return totalTime;
+            break;
     }
+
+    return totalTime;
 }
 
 ProcessResult processRequest(const ParseResult& parseResult, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap,
