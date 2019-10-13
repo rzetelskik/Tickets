@@ -184,15 +184,6 @@ ParseResult parseInputLine(const std::string& line) {
 //endregion
 
 //region Processing
-
-/*std::pair<Price, ValidTime> getTicketDataByName(const std::string& name, const TicketMap& ticketMap,
-        const TicketSortedMap& ticketSortedMap) {
-    //TODO tu sie moze wyjebac cos w sumie
-    Price price = ticketMap.find(name)->second;
-
-    return ticketSortedMap.find({price, name})->second;
-}*/
-
 enum CountingResultType {
     COUNTING_FOUND,
     COUNTING_WAIT,
@@ -246,8 +237,9 @@ CountingResult countTime(const Query& tour, const Timetable& timeTable) {
     return CountingResult(COUNTING_FOUND, CountingInfo(endTime - startTime));
 }
 
-std::vector<std::string> selectTickets(const TicketSortedMap& tickets, StopTime totalTime) {
-    const uint MAX_TICKETS = 3;
+using SelectedTickets = std::vector<std::string>;
+
+SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime) {
     std::string empty;
     unsigned long long minPrice = ULLONG_MAX;
 
@@ -323,7 +315,7 @@ std::vector<std::string> selectTickets(const TicketSortedMap& tickets, StopTime 
 
     }
 
-    std::vector<std::string> result;
+    SelectedTickets result;
 
     if(!ticketA.empty())
         result.push_back(ticketA);
