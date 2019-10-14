@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <set>
 #include <variant>
 #include <regex>
@@ -196,7 +197,31 @@ namespace {
         return parseError();
     }
 
-    //TODO refactor (clean code)
+
+    using SectionCheckResult = std::pair<CountingResultType, std::optional<std::pair<StopTime, StopTime>>>;
+
+    SectionCheckResult checkSection(const std::string& from, const std::string& to, const Route& line,
+        StopTime& arrivalTime) {
+        auto startStop = line.find(from);
+        auto endStop = line.find(to);
+
+        if(startStop == line.end() || endStop == line.end()) {
+            return SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
+        }
+        else if(startStop->second > endStop->second) {
+            return SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
+        }
+        else if(arrivalTime != 0 && arrivalTime != startStop->second) {
+            return (startStop->second > arrivalTime)
+                ? SectionCheckResult(COUNTING_WAIT, std::nullopt)
+                : SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);;
+        }
+        else {
+            arrivalTime = endStop->second;
+            return SectionCheckResult(COUNTING_FOUND, std::pair(startStop->second, endStop->second));
+        }
+    }
+
     CountingResult countTime(const Query &tour, const Timetable &timeTable) {
         StopTime arrivalTime = 0;
         StopTime startTime = 0;
@@ -207,125 +232,125 @@ namespace {
             auto &next = tour[i + 1];
 
             const auto &currentName = current.first;
-            const auto &line = timeTable.at(current.second);
             const auto &nextName = next.first;
 
-            auto startStop = line.find(currentName);
-            auto endStop = line.find(nextName);
-
-            if (startStop == line.end() || endStop == line.end()) {
-                return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
-            } else if (startStop->second > endStop->second) {
-                return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
-            } else if (i != 0 && arrivalTime != startStop->second) {
-                if (arrivalTime < startStop->second) {
-                    return CountingResult(COUNTING_WAIT, CountingInfo(startStop->first));
-                } else {
-                    return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
-                }
-            } else {
-                arrivalTime = endStop->second;
-
-                if (i == 0) {
-                    startTime = startStop->second;
-                }
-                if (i == tour.size() - 2) {
-                    endTime = endStop->second;
-                }
+            auto result = checkSection(currentName, nextName, timeTable.at(current.second), arrivalTime);
+            switch (result.first) {
+                case COUNTING_NOT_FOUND:
+                    return  CountingResult(COUNTING_NOT_FOUND, std::nullopt);
+                case COUNTING_WAIT:
+                    return  CountingResult(COUNTING_WAIT, currentName);
+                case COUNTING_FOUND:
+                    if(i == 0)
+                        startTime = result.second->first;
+                    if(i == tour.size() - 2)
+                        endTime = result.second->second;
+                    break;
             }
         }
 
         return CountingResult(COUNTING_FOUND, CountingInfo(endTime - startTime));
     }
 
-    //TODO change auto to aliases
-    //TODO refactor (clean code), use inline?
-    //TODO check for max values
-    SelectedTickets selectTickets(const TicketSortedMap &tickets, StopTime totalTime) {
-        std::string empty;
-        unsigned long long minPrice = ULLONG_MAX;
+    using TicketIterator = std::_Rb_tree_const_iterator<std::pair<const std::pair<ulong, std::string>, unsigned  long long>>;
+    using IteratingInfo = std::pair<unsigned long long, ValidTime>;
+    enum TICKET_STATUS {
+        NEW_BEST,
+        TOO_EXPENSIVE,
+        TOO_SHORT
+    };
+    using TicketSelectingResult = std::pair<TICKET_STATUS, IteratingInfo>;
 
-        std::string ticketA = empty;
-        std::string ticketB = empty;
-        std::string ticketC = empty;
+    TicketSelectingResult checkTicket(StopTime totalTime, const TicketIterator& it, IteratingInfo info, unsigned long long minPrice) {
+        const auto &key = it->first;
+        auto price = key.first;
+        auto time = it->second;
+
+        unsigned long long currentPrice = info.first + price;
+        ValidTime currentTime = info.second + time;
+
+        if(currentTime > totalTime) {
+            if(currentPrice <= minPrice) {
+                return TicketSelectingResult(NEW_BEST, IteratingInfo(currentPrice, currentTime));
+            }
+            return TicketSelectingResult(TOO_EXPENSIVE, IteratingInfo(currentPrice, currentTime));
+        }
+        return TicketSelectingResult(TOO_SHORT, IteratingInfo(currentPrice, currentTime));
+    }
+
+    std::pair<bool, bool> updateLoop(TicketSelectingResult& result, unsigned long long& minPrice) {
+        bool breakLoop = false;
+        bool updateBestTickets = false;
+
+        switch (result.first) {
+            case NEW_BEST:
+                minPrice = result.second.first;
+                updateBestTickets = true;
+                breakLoop = true;
+                break;
+
+            case TOO_EXPENSIVE:
+                breakLoop = true;
+                break;
+
+            case TOO_SHORT:
+                break;
+        }
+
+        return std::pair(updateBestTickets, breakLoop);
+    }
+
+
+    SelectedTickets selectTickets(const TicketSortedMap &tickets, StopTime totalTime) {
+        unsigned long long minPrice = ULLONG_MAX;
+        std::vector<std::string> bestTickets;
 
         //tickets are sorted ascending by price
         for (auto itA = tickets.cbegin(); itA != tickets.cend(); itA++) {
-            const auto &keyA = itA->first;
+            const auto &nameA = itA->first.second;
 
-            const auto &nameA = keyA.second;
-            auto priceA = keyA.first;
-            auto timeA = itA->second;
+            auto resultA = checkTicket(totalTime, itA, IteratingInfo(0, 0), minPrice);
+            auto updateResultA = updateLoop(resultA, minPrice);
 
-            unsigned long long currentPriceA = priceA;
-            ValidTime currentTimeA = timeA;
-
-            if (currentTimeA > totalTime) {
-                if (currentPriceA <= minPrice) {
-                    minPrice = currentPriceA;
-
-                    ticketA = nameA;
-                    ticketB = empty;
-                    ticketC = empty;
-                }
+            if(updateResultA.first) {
+                bestTickets = {nameA};
+            }
+            if(updateResultA.second) {
                 break;
             }
 
+
             for (auto itB = itA; itB != tickets.cend(); itB++) {
-                const auto &keyB = itB->first;
+                const auto &nameB = itB->first.second;
 
-                const auto &nameB = keyB.second;
-                auto priceB = keyB.first;
-                auto timeB = itB->second;
+                auto resultB = checkTicket(totalTime, itB, resultA.second, minPrice);
+                auto updateResultB= updateLoop(resultB, minPrice);
 
-                unsigned long long currentPriceB = currentPriceA + priceB;
-                ValidTime currentTimeB = currentTimeA + timeB;
-
-                if (currentTimeB > totalTime) {
-                    if (currentPriceB <= minPrice) {
-                        minPrice = currentPriceB;
-
-                        ticketA = nameA;
-                        ticketB = nameB;
-                        ticketC = empty;
-                    }
+                if(updateResultB.first) {
+                    bestTickets = {nameA, nameB};
+                }
+                if(updateResultB.second) {
                     break;
                 }
 
+
                 for (auto itC = itB; itC != tickets.cend(); itC++) {
-                    const auto &keyC = itC->first;
+                    const auto &nameC = itC->first.second;
 
-                    const auto &nameC = keyC.second;
-                    auto priceC = keyC.first;
-                    auto timeC = itC->second;
+                    auto resultC = checkTicket(totalTime, itC, resultB.second, minPrice);
+                    auto updateResultC = updateLoop(resultC, minPrice);
 
-                    unsigned long long currentPriceC = currentPriceB + priceC;
-                    ValidTime currentTimeC = currentTimeB + timeC;
-
-                    if (currentTimeC > totalTime) {
-                        if (currentPriceC <= minPrice) {
-                            minPrice = currentPriceC;
-
-                            ticketA = nameA;
-                            ticketB = nameB;
-                            ticketC = nameC;
-                        }
+                    if(updateResultC.first) {
+                        bestTickets = {nameA, nameB, nameC};
+                    }
+                    if(updateResultC.second) {
                         break;
                     }
                 }
             }
         }
 
-        SelectedTickets result;
-
-        if (!ticketA.empty())
-            result.push_back(ticketA);
-        if (!ticketB.empty())
-            result.push_back(ticketB);
-        if (!ticketC.empty())
-            result.push_back(ticketC);
-
-        return result;
+        return bestTickets;
     }
 
     ProcessResult processError() {
