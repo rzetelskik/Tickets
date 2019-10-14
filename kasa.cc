@@ -2,7 +2,6 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <unordered_set>
 #include <set>
 #include <variant>
 #include <regex>
@@ -12,9 +11,8 @@ using Price = unsigned long;
 using ValidTime = unsigned long long;
 using TicketMap = std::unordered_map<std::string, Price>;
 using TicketSortedMap = std::map<std::pair<Price, std::string>, ValidTime>;
-using StopNameSet = std::unordered_set<std::string>;
 using StopTime = unsigned long; //TODO: change type?
-using Route = std::map<std::string, StopTime>;
+using Route = std::unordered_map<std::string, StopTime>;
 using LineNum = unsigned long long;
 using Timetable = std::unordered_map<LineNum, Route>;
 using AddRoute = std::pair<LineNum, Route>;
@@ -32,6 +30,16 @@ enum RequestType {
 };
 
 using ParseResult = std::pair<RequestType, std::optional<Request>>;
+
+enum CountingResultType {
+    COUNTING_FOUND,
+    COUNTING_WAIT,
+    COUNTING_NOT_FOUND
+};
+
+using CountingInfo = std::variant<StopTime, std::string>;
+using CountingResult = std::pair<CountingResultType, std::optional<CountingInfo>>;
+using SelectedTickets = std::vector<std::string>;
 
 enum ResponseType {
     FOUND,
@@ -131,11 +139,12 @@ ParseResult parseAddTicket(const std::string& line) {
     Price integerPart = std::stoul(match.str(2));
     Price decimalPart = std::stoul(match.str(3));
     Price fullPrice = 100 * integerPart + decimalPart;
-    ValidTime validTime = std::stoull(match.str(4));
 
     if (!isPriceCorrect(fullPrice)) {
         return parseError();
     }
+
+    ValidTime validTime = std::stoull(match.str(4));
 
     AddTicket addTicket = {name, {fullPrice, validTime}};
     return ParseResult(ADD_TICKET, Request(addTicket));
@@ -184,13 +193,6 @@ ParseResult parseInputLine(const std::string& line) {
 //endregion
 
 //region Processing
-enum CountingResultType {
-    COUNTING_FOUND,
-    COUNTING_WAIT,
-    COUNTING_NOT_FOUND
-};
-using CountingInfo = std::variant<StopTime, std::string>;
-using CountingResult = std::pair<CountingResultType, std::optional<CountingInfo>>;
 
 CountingResult countTime(const Query& tour, const Timetable& timeTable) {
     StopTime arrivalTime = 0;
@@ -233,8 +235,6 @@ CountingResult countTime(const Query& tour, const Timetable& timeTable) {
     return CountingResult(COUNTING_FOUND, CountingInfo(endTime - startTime));
 }
 
-using SelectedTickets = std::vector<std::string>;
-
 SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime) {
     std::string empty;
     unsigned long long minPrice = ULLONG_MAX;
@@ -254,7 +254,7 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
         unsigned long long currentPriceA = priceA;
         ValidTime currentTimeA = timeA;
 
-        if (currentTimeA >= totalTime) {
+        if (currentTimeA > totalTime) {
             if (currentPriceA <= minPrice) {
                 minPrice = currentPriceA;
 
@@ -275,7 +275,7 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
             unsigned long long currentPriceB = currentPriceA + priceB;
             ValidTime currentTimeB = currentTimeA + timeB;
 
-            if (currentTimeB >= totalTime) {
+            if (currentTimeB > totalTime) {
                 if (currentPriceB <= minPrice) {
                     minPrice = currentPriceB;
 
@@ -296,7 +296,7 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
                 unsigned long long currentPriceC = currentPriceB + priceC;
                 ValidTime currentTimeC = currentTimeB + timeC;
 
-                if (currentTimeC >= totalTime) {
+                if (currentTimeC > totalTime) {
                     if (currentPriceC <= minPrice) {
                         minPrice = currentPriceC;
 
@@ -308,7 +308,6 @@ SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime
                 }
             }
         }
-
     }
 
     SelectedTickets result;
@@ -412,7 +411,7 @@ ProcessResult processRequest(const ParseResult& parseResult, TicketMap& ticketMa
 //endregion
 
 void printFound(const std::vector<std::string>& tickets) {
-    std::cout << '!';
+    std::cout << "! ";
     bool first = true;
     for (auto& ticket: tickets) {
         if (!first)
@@ -426,7 +425,7 @@ void printFound(const std::vector<std::string>& tickets) {
 }
 
 void printWait(const std::string& stop) {
-    std::cout << ":-(" << stop << std::endl;
+    std::cout << ":-( " << stop << std::endl;
 }
 
 void printNotFound() {
@@ -452,7 +451,14 @@ void printOutput(const ProcessResult& processResult, const std::string& inputLin
     }
 }
 
+void printTicketCount(unsigned int ticketCounter) {
+    std::cout << ticketCounter << std::endl;
+}
+
 int main() {
+    std::ios_base::sync_with_stdio(false);
+    std::cin.tie(NULL);
+
     TicketMap ticketMap;
     TicketSortedMap ticketSortedMap;
     Timetable timetable;
@@ -467,7 +473,7 @@ int main() {
         printOutput(processResult, buffer, lineCounter);
         lineCounter++;
     }
-    std::cout << ticketCounter << std::endl;
+    printTicketCount(ticketCounter);
 
     return 0;
 }
