@@ -12,7 +12,7 @@ namespace {
     using ValidTime = unsigned long long;
     using TicketMap = std::unordered_map<std::string, Price>;
     using TicketSortedMap = std::map<std::pair<Price, std::string>, ValidTime>;
-    using StopTime = unsigned long; //TODO: change type?
+    using StopTime = unsigned long;
     using Route = std::unordered_map<std::string, StopTime>;
     using LineNum = unsigned long long;
     using Timetable = std::unordered_map<LineNum, Route>;
@@ -79,104 +79,183 @@ namespace {
     }
 
     bool isStopTimeCorrect(StopTime stopTime, StopTime prevStopTime) {
-        //TODO const the predefined values
-        return (stopTime > prevStopTime && stopTime >= 355 && stopTime <= 1281);
+        static const int minutesLowerBound = 355, minutesUpperBound = 1281;
+        return (stopTime > prevStopTime && stopTime >= minutesLowerBound && stopTime <= minutesUpperBound);
     }
 
     bool isStopRepeated(const std::string &stopName, const Route &route) {
         return (route.find(stopName) != route.end());
     }
 
+    std::optional<StopTime> getRouteStopTime(const std::string& strHour, const std::string& strMinute) {
+        try {
+            return 60 * stoul(strHour) + stoul(strMinute);
+        } catch (std::exception& e) {
+            return std::nullopt;
+        }
+    }
+
+    std::optional<Route> parseRouteStops(const std::string& str, const std::string& rgxHour,
+            const std::string& rgxMinute, const std::string& rgxStopName) {
+        static const int rgxHourGroupPos = 1, rgxMinuteGroupPos = 2, rgxStopNameGroupPos = 3;
+        Route route;
+        StopTime prevStopTime = 0;
+
+        std::regex rgx(" (" + rgxHour + "):(" + rgxMinute + ") (" + rgxStopName + ")");
+        for (auto it = std::sregex_iterator(str.begin(), str.end(), rgx); it != std::sregex_iterator(); ++it) {
+            std::smatch match = *it;
+
+            const std::string &stopName = match.str(rgxStopNameGroupPos);
+            if (isStopRepeated(stopName, route)) {
+                return std::nullopt;
+            }
+
+            auto stopTime = getRouteStopTime(match.str(rgxHourGroupPos), match.str(rgxMinuteGroupPos));
+            if (!stopTime.has_value() || !isStopTimeCorrect(stopTime.value(), prevStopTime)) {
+                return std::nullopt;
+            }
+
+            route.insert({stopName, stopTime.value()});
+            prevStopTime = stopTime.value();
+        }
+
+        return route;
+    }
+
     ParseResult parseAddRoute(const std::string &line) {
-        //TODO split regex + add static const to one-time strings
-        std::regex rgx(R"(^(\d+)((?: (?:[5-9]|1\d|2[0-1]):[0-5]\d [a-zA-Z^_]+)+)$)");
+        static const std::string rgxLineNum = R"(\d+)";
+        static const std::string rgxHour = R"([5-9]|1\d|2[0-1])";
+        static const std::string rgxMinute = R"([0-5]\d)";
+        static const std::string rgxStopName = R"([a-zA-Z^_]+)";
+        static const int rgxLineGroupPos = 1, rgxIterGroupPos = 2;
+
+        std::regex rgx("^(" + rgxLineNum + ")((?: (?:" + rgxHour + "):" + rgxMinute + " " + rgxStopName + ")+)$");
+//        std::regex rgx(R"(^(\d+)((?: (?:[5-9]|1\d|2[0-1]):[0-5]\d [a-zA-Z^_]+)+)$)");
         std::smatch match;
 
-        //TODO exceptions
         if (!std::regex_match(line, match, rgx)) {
             return parseError();
         }
-        //TODO name the group numbers, statics consts/pairs, wtv
-        LineNum lineNum = stoull(match.str(1));
-        Route route;
-        StopTime prevStopTime = 0;
-        std::string iterStr = match.str(2);
-        std::regex iterRgx(R"( ([5-9]|1\d|2[0-1])\:([0-5]\d) ([a-zA-Z^_]+))");
 
-        for (auto it = std::sregex_iterator(iterStr.begin(), iterStr.end(), iterRgx);
-             it != std::sregex_iterator(); ++it) {
-            std::smatch iterMatch = *it;
+        LineNum lineNum = stoull(match.str(rgxLineGroupPos));
 
-            const std::string &stopName = iterMatch.str(3);
-            if (isStopRepeated(stopName, route)) {
-                return parseError();
-            }
-
-            StopTime stopTime = 60 * stoul(iterMatch.str(1)) + stoul(iterMatch.str(2));
-            if (!isStopTimeCorrect(stopTime, prevStopTime)) {
-                return parseError();
-            }
-
-            route.insert({stopName, stopTime});
-
-            prevStopTime = stopTime;
+        auto route = parseRouteStops(match.str(rgxIterGroupPos), rgxHour, rgxMinute, rgxStopName);
+        if (!route.has_value()) {
+            return parseError();
         }
 
-        return ParseResult(ADD_ROUTE, AddRoute(lineNum, route));
+        return ParseResult(ADD_ROUTE, AddRoute(lineNum, route.value()));
     }
 
-    bool isPriceCorrect(const Price &price) {
+    bool isPriceCorrect(Price price) {
         return (price > 0.00);
     }
 
+    inline std::optional<Price> getFullPrice(const std::string& strIntegerPart, const std::string& strDecimalPart) {
+        try {
+            Price integerPart = std::stoul(strIntegerPart);
+            Price decimalPart = std::stoul(strDecimalPart);
+
+            return 100 * integerPart + decimalPart;
+        } catch (std::exception& e) {
+            return std::nullopt;
+        }
+    }
+
+    inline std::optional<ValidTime> getTicketTime(const std::string& strTime) {
+        try {
+            return std::stoull(strTime);
+        } catch (std::exception& e) {
+            return std::nullopt;
+        }
+    }
+
     ParseResult parseAddTicket(const std::string &line) {
-        std::regex rgx(R"(^([a-zA-Z ]+) (\d+)\.(\d{2}) ([1-9]\d*)$)");
+        static const std::string rgxTicketName = R"(([a-zA-Z ]+))";
+        static const std::string rgxTicketPrice = R"((\d+)\.(\d{2}))";
+        static const std::string rgxTicketTime = R"(([1-9]\d*))";
+        static const int rgxTicketNamePos = 1, rgxTicketPriceIntegerPos = 2,
+        rgxTicketPriceDecimalPos = 3, rgxTicketTimePos = 4;
+
+        std::regex rgx("^" + rgxTicketName + " " + rgxTicketPrice + " " + rgxTicketTime + "$");
+//        std::regex rgx(R"(^([a-zA-Z ]+) (\d+)\.(\d{2}) ([1-9]\d*)$)");
         std::smatch match;
 
         if (!std::regex_match(line, match, rgx)) {
             return parseError();
         }
 
-        //TODO exceptions
-        std::string name = match.str(1);
+        std::string name = match.str(rgxTicketNamePos);
 
-        Price integerPart = std::stoul(match.str(2));
-        Price decimalPart = std::stoul(match.str(3));
-        Price fullPrice = 100 * integerPart + decimalPart;
-
-        if (!isPriceCorrect(fullPrice)) {
+        auto price = getFullPrice(match.str(rgxTicketPriceIntegerPos), match.str(rgxTicketPriceDecimalPos));
+        if (!price.has_value() || !isPriceCorrect(price.value())) {
             return parseError();
         }
 
-        ValidTime validTime = std::stoull(match.str(4));
+        auto validTime = getTicketTime(match.str(rgxTicketTimePos));
+        if (!validTime.has_value()) {
+            return parseError();
+        }
 
-        AddTicket addTicket = {name, {fullPrice, validTime}};
+        AddTicket addTicket = {name, {price.value(), validTime.value()}};
         return ParseResult(ADD_TICKET, Request(addTicket));
     }
 
-    ParseResult parseQuery(const std::string &line) {
-        std::regex rgx(R"(^\?((?: [a-zA-Z^_]+ \d+)+) ([a-zA-Z^_]+)$)");
-        std::smatch match;
-
-        //TODO exceptions
-        if (!std::regex_match(line, match, rgx)) {
-            return parseError();
+    std::optional<StopTime> getQueryStopTime(const std::string& strStopTime) {
+        try {
+            return std::stoul(strStopTime);
+        } catch (std::exception &e) {
+            return std::nullopt;
         }
-        Query query;
-        std::regex iterRgx(R"( ([a-zA-Z^_]+) (\d+))");
-        std::string iterStr = match.str(1);
-        for (auto it = std::sregex_iterator(iterStr.begin(), iterStr.end(), iterRgx);
-             it != std::sregex_iterator(); ++it) {
-            std::smatch iterMatch = *it;
+    }
 
-            QueryStop queryStop = {iterMatch.str(1), std::stoul(iterMatch.str(2))};
+    std::optional<Query> parseQueryStops(const std::string& str, const std::string& rgxStopName, const std::string& rgxStopTime) {
+        static const int rgxStopNamePos = 1, rgxStopTimePos = 2;
+
+        Query query;
+        std::regex rgx(" (" + rgxStopName + ") (" + rgxStopTime + ")");
+        for (auto it = std::sregex_iterator(str.begin(), str.end(), rgx);
+             it != std::sregex_iterator(); ++it) {
+            std::smatch match = *it;
+
+            std::string name = match.str(rgxStopNamePos);
+
+            auto stopTime = getQueryStopTime(match.str(rgxStopTimePos));
+            if (!stopTime.has_value()) {
+                return std::nullopt;
+            }
+
+            QueryStop queryStop = {name, stopTime.value()};
             query.push_back(queryStop);
         }
 
-        QueryStop queryStop = {match.str(match.size() - 1), 0};
-        query.push_back(queryStop);
+        return query;
+    }
 
-        return ParseResult(QUERY, query);
+    ParseResult parseQuery(const std::string &line) {
+        static const std::string rgxQueryChar = R"(\?)";
+        static const std::string rgxStopName = R"([a-zA-Z^_]+)";
+        static const std::string rgxStopTime = R"(\d+)";
+        static const int rgxIterStrPos = 1;
+
+        std::regex rgx("^" + rgxQueryChar + "((?: " + rgxStopName + " " + rgxStopTime + ")+) (" + rgxStopName + ")$");
+//        std::regex rgx(R"(^\?((?: [a-zA-Z^_]+ \d+)+) ([a-zA-Z^_]+)$)");
+        std::smatch match;
+
+        if (!std::regex_match(line, match, rgx)) {
+            return parseError();
+        }
+
+        auto query = parseQueryStops(match.str(rgxIterStrPos), rgxStopName, rgxStopTime);
+        if (!query.has_value()) {
+            return parseError();
+        }
+
+        int rgxLasStopNamePos = match.size() - 1;
+        QueryStop queryStop = {match.str(rgxLasStopNamePos), 0};
+        query.value().push_back(queryStop);
+
+        return ParseResult(QUERY, query.value());
     }
 
     ParseResult parseInputLine(const std::string &line) {
