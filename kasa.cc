@@ -79,6 +79,7 @@ ParseResult parseError() {
 }
 
 bool isStopTimeCorrect(StopTime stopTime, StopTime prevStopTime) {
+    //TODO const the predefined values
     return (stopTime > prevStopTime && stopTime >= 355 && stopTime <= 1281);
 }
 
@@ -87,6 +88,7 @@ bool isStopRepeated(const std::string& stopName, const Route& route) {
 }
 
 ParseResult parseAddRoute(const std::string& line) {
+    //TODO split regex + add static const to one-time strings
     std::regex rgx(R"(^(\d+)((?: (?:[5-9]|1\d|2[0-1]):[0-5]\d [a-zA-Z^_]+)+)$)");
     std::smatch match;
 
@@ -94,6 +96,7 @@ ParseResult parseAddRoute(const std::string& line) {
     if (!std::regex_match(line, match, rgx)) {
         return parseError();
     }
+    //TODO name the group numbers, statics consts/pairs, wtv
     LineNum lineNum = stoull(match.str(1));
     Route route;
     StopTime prevStopTime = 0;
@@ -194,6 +197,7 @@ ParseResult parseInputLine(const std::string& line) {
 
 //region Processing
 
+//TODO refactor (clean code)
 CountingResult countTime(const Query& tour, const Timetable& timeTable) {
     StopTime arrivalTime = 0;
     StopTime startTime = 0;
@@ -235,6 +239,9 @@ CountingResult countTime(const Query& tour, const Timetable& timeTable) {
     return CountingResult(COUNTING_FOUND, CountingInfo(endTime - startTime));
 }
 
+//TODO change auto to aliases
+//TODO refactor (clean code), use inline?
+//TODO check for max values
 SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime) {
     std::string empty;
     unsigned long long minPrice = ULLONG_MAX;
