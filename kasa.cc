@@ -41,7 +41,18 @@ namespace {
 
     using CountingInfo = std::variant<StopTime, std::string>;
     using CountingResult = std::pair<CountingResultType, std::optional<CountingInfo>>;
+    using SectionCheckResult = std::pair<CountingResultType, std::optional<std::pair<StopTime, StopTime>>>;
     using SelectedTickets = std::vector<std::string>;
+    using TicketIterator = std::_Rb_tree_const_iterator<std::pair<const std::pair<ulong, std::string>, unsigned long long>>;
+    using IteratingInfo = std::pair<unsigned long long, ValidTime>;
+    
+    enum TicketStatus {
+        NEW_BEST,
+        TOO_EXPENSIVE,
+        TOO_SHORT
+    };
+    
+    using TicketSelectingResult = std::pair<TicketStatus, IteratingInfo>;
 
     enum ResponseType {
         FOUND,
@@ -197,26 +208,20 @@ namespace {
         return parseError();
     }
 
-
-    using SectionCheckResult = std::pair<CountingResultType, std::optional<std::pair<StopTime, StopTime>>>;
-
     SectionCheckResult checkSection(const std::string& from, const std::string& to, const Route& line,
         StopTime& arrivalTime) {
         auto startStop = line.find(from);
         auto endStop = line.find(to);
 
-        if(startStop == line.end() || endStop == line.end()) {
+        if (startStop == line.end() || endStop == line.end()) {
             return SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
-        }
-        else if(startStop->second > endStop->second) {
+        } else if(startStop->second > endStop->second) {
             return SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
-        }
-        else if(arrivalTime != 0 && arrivalTime != startStop->second) {
+        } else if(arrivalTime != 0 && arrivalTime != startStop->second) {
             return (startStop->second > arrivalTime)
                 ? SectionCheckResult(COUNTING_WAIT, std::nullopt)
-                : SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);;
-        }
-        else {
+                : SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
+        } else {
             arrivalTime = endStop->second;
             return SectionCheckResult(COUNTING_FOUND, std::pair(startStop->second, endStop->second));
         }
@@ -241,9 +246,9 @@ namespace {
                 case COUNTING_WAIT:
                     return  CountingResult(COUNTING_WAIT, currentName);
                 case COUNTING_FOUND:
-                    if(i == 0)
+                    if (i == 0)
                         startTime = result.second->first;
-                    if(i == tour.size() - 2)
+                    if (i == tour.size() - 2)
                         endTime = result.second->second;
                     break;
             }
@@ -251,15 +256,6 @@ namespace {
 
         return CountingResult(COUNTING_FOUND, CountingInfo(endTime - startTime));
     }
-
-    using TicketIterator = std::_Rb_tree_const_iterator<std::pair<const std::pair<ulong, std::string>, unsigned  long long>>;
-    using IteratingInfo = std::pair<unsigned long long, ValidTime>;
-    enum TICKET_STATUS {
-        NEW_BEST,
-        TOO_EXPENSIVE,
-        TOO_SHORT
-    };
-    using TicketSelectingResult = std::pair<TICKET_STATUS, IteratingInfo>;
 
     TicketSelectingResult checkTicket(StopTime totalTime, const TicketIterator& it, IteratingInfo info, unsigned long long minPrice) {
         const auto &key = it->first;
@@ -269,8 +265,8 @@ namespace {
         unsigned long long currentPrice = info.first + price;
         ValidTime currentTime = info.second + time;
 
-        if(currentTime > totalTime) {
-            if(currentPrice <= minPrice) {
+        if (currentTime > totalTime) {
+            if (currentPrice <= minPrice) {
                 return TicketSelectingResult(NEW_BEST, IteratingInfo(currentPrice, currentTime));
             }
             return TicketSelectingResult(TOO_EXPENSIVE, IteratingInfo(currentPrice, currentTime));
@@ -288,11 +284,9 @@ namespace {
                 updateBestTickets = true;
                 breakLoop = true;
                 break;
-
             case TOO_EXPENSIVE:
                 breakLoop = true;
                 break;
-
             case TOO_SHORT:
                 break;
         }
@@ -332,7 +326,6 @@ namespace {
                 if(updateResultB.second) {
                     break;
                 }
-
 
                 for (auto itC = itB; itC != tickets.cend(); itC++) {
                     const auto &nameC = itC->first.second;
@@ -399,8 +392,7 @@ namespace {
         return processNoResponse();
     }
 
-    ProcessResult
-    processQuery(const Query &query, Timetable &timetable, TicketSortedMap &ticketMap, uint &ticketCounter) {
+    ProcessResult processQuery(const Query &query, Timetable &timetable, TicketSortedMap &ticketMap, unsigned int &ticketCounter) {
         auto countingResult = countTime(query, timetable);
 
         switch (countingResult.first) {
@@ -442,14 +434,16 @@ namespace {
     }
 
     void printFound(const std::vector<std::string> &tickets) {
-        std::cout << "! ";
         bool first = true;
+        
+        std::cout << "! ";
         for (auto &ticket: tickets) {
-            if (!first)
+            if (!first) {
                 std::cout << "; ";
-            else
+            } else {
                 first = false;
-
+            }
+            
             std::cout << ticket;
         }
         std::cout << std::endl;
