@@ -300,54 +300,64 @@ namespace {
         return std::pair(updateBestTickets, breakLoop);
     }
 
+    void select3rdTicket(const TicketSortedMap& tickets, StopTime totalTime, SelectedTickets& bestTickets,
+                         unsigned long long minPrice, const TicketIterator& it, const IteratingInfo& prev,
+                         const std::string& nameA, const std::string& nameB) {
+        for (auto itC = it; itC != tickets.cend(); itC++) {
+            const auto &name = itC->first.second;
 
-    SelectedTickets selectTickets(const TicketSortedMap &tickets, StopTime totalTime) {
-        unsigned long long minPrice = ULLONG_MAX;
-        std::vector<std::string> bestTickets;
+            auto result = checkTicket(totalTime, itC, prev, minPrice);
+            auto updateResult = updateLoop(result, minPrice);
 
-        //tickets are sorted ascending by price
-        for (auto itA = tickets.cbegin(); itA != tickets.cend(); itA++) {
-            const auto &nameA = itA->first.second;
-
-            auto resultA = checkTicket(totalTime, itA, IteratingInfo(0, 0), minPrice);
-            auto updateResultA = updateLoop(resultA, minPrice);
-
-            if(updateResultA.first) {
-                bestTickets = {nameA};
+            if(updateResult.first) {
+                bestTickets = {nameA, nameB, name};
             }
-            if(updateResultA.second) {
+            if(updateResult.second) {
+                break;
+            }
+        }
+    }
+
+    void select2ndTicket(const TicketSortedMap& tickets, StopTime totalTime, SelectedTickets& bestTickets,
+                         unsigned long long minPrice, const TicketIterator& it, const IteratingInfo& prev,
+                         const std::string& nameA) {
+        for (auto itB = it; itB != tickets.cend(); itB++) {
+            const auto &name = itB->first.second;
+
+            auto resultB = checkTicket(totalTime, itB, prev, minPrice);
+            auto updateResultB = updateLoop(resultB, minPrice);
+
+            if(updateResultB.first) {
+                bestTickets = {nameA, name};
+            }
+            if(updateResultB.second) {
                 break;
             }
 
-
-            for (auto itB = itA; itB != tickets.cend(); itB++) {
-                const auto &nameB = itB->first.second;
-
-                auto resultB = checkTicket(totalTime, itB, resultA.second, minPrice);
-                auto updateResultB= updateLoop(resultB, minPrice);
-
-                if(updateResultB.first) {
-                    bestTickets = {nameA, nameB};
-                }
-                if(updateResultB.second) {
-                    break;
-                }
+            select3rdTicket(tickets, totalTime, bestTickets, minPrice, itB, resultB.second, nameA, name);
+        }
+    }
 
 
-                for (auto itC = itB; itC != tickets.cend(); itC++) {
-                    const auto &nameC = itC->first.second;
+    SelectedTickets selectTickets(const TicketSortedMap &tickets, StopTime totalTime) {
+        unsigned long long minPrice = ULLONG_MAX;
+        SelectedTickets bestTickets;
 
-                    auto resultC = checkTicket(totalTime, itC, resultB.second, minPrice);
-                    auto updateResultC = updateLoop(resultC, minPrice);
+        //tickets are sorted ascending by price
+        for (auto it = tickets.cbegin(); it != tickets.cend(); it++) {
+            const auto &name = it->first.second;
 
-                    if(updateResultC.first) {
-                        bestTickets = {nameA, nameB, nameC};
-                    }
-                    if(updateResultC.second) {
-                        break;
-                    }
-                }
+            auto result = checkTicket(totalTime, it, IteratingInfo(0, 0), minPrice);
+            auto updateResult = updateLoop(result, minPrice);
+
+            if(updateResult.first) {
+                bestTickets = {name};
             }
+            if(updateResult.second) {
+                break;
+            }
+            
+            select2ndTicket(tickets, totalTime, bestTickets, minPrice, it, result.second, name);
         }
 
         return bestTickets;
