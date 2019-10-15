@@ -1,8 +1,38 @@
-bilet z wieloma spacjami 1424122.00 100
+bilet a -5.00 23
+bilet b 42.24 -13
+bilet c 23.242 24
+bilet d  24.24 21
+
+123 10:00 ssf  12:00 fs
+
+dobry a 100.00 10
+dobry b 80.00 5
+dobry c 60.00 3
+dobry d 5.00 1
+
+123 10:00 przystanekA
+
+? przystanekA 123 przystanekA
+
+
+bilet test owy 3.42 242
+bilet test owy 0.42 24422
+
+66 10:00 ee 11:00 eeee
+66 14:00 fse 51:00 ebebebeb
+
+0 10:01 t 10:02 r
+-4 10:01 t 10:02 r
+
 1 6:00 Banacha 7:00 Pasteura 8:00 Winnicka
 2 6:00 Winnicka 7:00 Banacha 8:00 Pasteura
 3 6:00 Winnicka 5:00 Banacha 6:00
 4 8:00 Winnicka 9:00 Banacha
+
+? Banacha 423 Winnicka
+? sgdsgs 2 Banacha
+
+
 ? Banacha 1 Winnicka 4 Banacha
 Niedlugi 2.30 3
 Dlugi Drogi 3.80 60

@@ -19,7 +19,7 @@ namespace {
     using Timetable = std::unordered_map<LineNum, Route>;
     using AddRoute = std::pair<LineNum, Route>;
     using AddTicket = std::pair<std::string, std::pair<Price, ValidTime>>;
-    using QueryStop = std::pair<std::string, StopTime>;
+    using QueryStop = std::pair<std::string, LineNum>;
     using Query = std::vector<QueryStop>;
     using Request = std::variant<AddRoute, AddTicket, Query>;
 
@@ -36,7 +36,7 @@ namespace {
     enum CountingResultType {
         COUNTING_FOUND,
         COUNTING_WAIT,
-        COUNTING_NOT_FOUND
+        COUNTING_ERR
     };
 
     using CountingInfo = std::variant<StopTime, std::string>;
@@ -287,13 +287,13 @@ namespace {
         auto endStop = line.find(to);
 
         if (startStop == line.end() || endStop == line.end()) {
-            return SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
+            return SectionCheckResult(COUNTING_ERR, std::nullopt);
         } else if (startStop->second > endStop->second) {
-            return SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
+            return SectionCheckResult(COUNTING_ERR, std::nullopt);
         } else if (arrivalTime != 0 && arrivalTime != startStop->second) {
             return (startStop->second > arrivalTime)
                    ? SectionCheckResult(COUNTING_WAIT, std::nullopt)
-                   : SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
+                   : SectionCheckResult(COUNTING_ERR, std::nullopt);
         } else {
             arrivalTime = endStop->second;
             return SectionCheckResult(COUNTING_FOUND, std::pair(startStop->second, endStop->second));
@@ -312,10 +312,13 @@ namespace {
             const auto& currentName = current.first;
             const auto& nextName = next.first;
 
-            auto result = checkSection(currentName, nextName, timetable.at(current.second), arrivalTime);
+            const auto& line = timetable.find(current.second);
+            if(line == timetable.end()) {
+                return CountingResult(COUNTING_ERR, std::nullopt);
+            }
+
+            auto result = checkSection(currentName, nextName, line->second, arrivalTime);
             switch (result.first) {
-                case COUNTING_NOT_FOUND:
-                    return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
                 case COUNTING_WAIT:
                     return CountingResult(COUNTING_WAIT, currentName);
                 case COUNTING_FOUND:
@@ -324,6 +327,8 @@ namespace {
                     if (i == tour.size() - 2)
                         endTime = result.second->second;
                     break;
+                case COUNTING_ERR:
+                    return CountingResult(COUNTING_ERR, std::nullopt);
             }
         }
 
@@ -499,8 +504,8 @@ namespace {
             }
             case COUNTING_WAIT:
                 return ProcessResult(WAIT, Response(std::get<std::string>(countingResult.second.value())));
-            default:
-                break;
+            case COUNTING_ERR:
+                return ProcessResult(ERROR_RESP, std::nullopt);
         }
 
         return ProcessResult(NOT_FOUND, std::nullopt);
