@@ -353,13 +353,12 @@ namespace {
         return TicketSelectingResult(TOO_SHORT, IteratingInfo(currentPrice, currentTime));
     }
 
-    std::pair<bool, bool> updateLoop(TicketSelectingResult& result, unsigned long long& minPrice) {
+    std::pair<bool, bool> updateLoop(TicketSelectingResult& result) {
         bool breakLoop = false;
         bool updateBestTickets = false;
 
         switch (result.first) {
             case NEW_BEST:
-                minPrice = result.second.first;
                 updateBestTickets = true;
                 breakLoop = true;
                 break;
@@ -374,15 +373,16 @@ namespace {
     }
 
     void select3rdTicket(const TicketSortedMap& tickets, StopTime totalTime, SelectedTickets& bestTickets,
-                         unsigned long long minPrice, const TicketIterator& it, const IteratingInfo& prev,
+                         unsigned long long& minPrice, const TicketIterator& it, const IteratingInfo& prev,
                          const std::string& nameA, const std::string& nameB) {
         for (auto itC = it; itC != tickets.cend(); itC++) {
             const auto &name = itC->first.second;
 
             auto result = checkTicket(totalTime, itC, prev, minPrice);
-            auto updateResult = updateLoop(result, minPrice);
+            auto updateResult = updateLoop(result);
 
             if(updateResult.first) {
+                minPrice = result.second.first;
                 bestTickets = {nameA, nameB, name};
             }
             if(updateResult.second) {
@@ -392,22 +392,23 @@ namespace {
     }
 
     void select2ndTicket(const TicketSortedMap& tickets, StopTime totalTime, SelectedTickets& bestTickets,
-                         unsigned long long minPrice, const TicketIterator& it, const IteratingInfo& prev,
+                         unsigned long long& minPrice, const TicketIterator& it, const IteratingInfo& prev,
                          const std::string& nameA) {
         for (auto itB = it; itB != tickets.cend(); itB++) {
             const auto &name = itB->first.second;
 
-            auto resultB = checkTicket(totalTime, itB, prev, minPrice);
-            auto updateResultB = updateLoop(resultB, minPrice);
+            auto result = checkTicket(totalTime, itB, prev, minPrice);
+            auto updateResult = updateLoop(result);
 
-            if(updateResultB.first) {
+            if(updateResult.first) {
+                minPrice = result.second.first;
                 bestTickets = {nameA, name};
             }
-            if(updateResultB.second) {
+            if(updateResult.second) {
                 break;
             }
 
-            select3rdTicket(tickets, totalTime, bestTickets, minPrice, itB, resultB.second, nameA, name);
+            select3rdTicket(tickets, totalTime, bestTickets, minPrice, itB, result.second, nameA, name);
         }
     }
 
@@ -421,9 +422,10 @@ namespace {
             const auto &name = it->first.second;
 
             auto result = checkTicket(totalTime, it, IteratingInfo(0, 0), minPrice);
-            auto updateResult = updateLoop(result, minPrice);
+            auto updateResult = updateLoop(result);
 
             if(updateResult.first) {
+                minPrice = result.second.first;
                 bestTickets = {name};
             }
             if(updateResult.second) {

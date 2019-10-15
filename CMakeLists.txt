@@ -10,6 +10,6 @@ set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(CMAKE_CXX_COMPILER "g++")
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -O2 -std=c++17")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -std=c++17")
 
 add_executable(kasa kasa.cc)
