@@ -496,8 +496,10 @@ namespace {
 
         switch (countingResult.first) {
             case COUNTING_FOUND:
+            {
                 SelectedTickets tickets = selectTickets(ticketMap, std::get<StopTime>(countingResult.second.value_or(0)));
                 return processCountingFound(tickets, ticketCounter);
+            }
             case COUNTING_WAIT:
                 return ProcessResult(WAIT, Response(std::get<std::string>(countingResult.second.value())));
             default:
