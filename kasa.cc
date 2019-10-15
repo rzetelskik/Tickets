@@ -291,7 +291,7 @@ namespace {
                 break;
         }
 
-        return std::pair(updateBestTickets, breakLoop);
+        return {updateBestTickets, breakLoop};
     }
 
     void select3rdTicket(const TicketSortedMap& tickets, StopTime totalTime, SelectedTickets& bestTickets,
@@ -403,19 +403,22 @@ namespace {
         return processNoResponse();
     }
 
+    ProcessResult processCountingFound(SelectedTickets& tickets, unsigned int& ticketCounter) {
+        if (!tickets.empty()) {
+            ticketCounter += tickets.size();
+            return ProcessResult(FOUND, tickets);
+        } else {
+            return ProcessResult(NOT_FOUND, std::nullopt);
+        }
+    }
+
     ProcessResult processQuery(const Query &query, Timetable &timetable, TicketSortedMap &ticketMap, unsigned int &ticketCounter) {
         auto countingResult = countTime(query, timetable);
 
         switch (countingResult.first) {
             case COUNTING_FOUND: {
                 auto tickets = selectTickets(ticketMap, std::get<StopTime>(countingResult.second.value_or(0)));
-
-                if (!tickets.empty()) {
-                    ticketCounter += tickets.size();
-                    return ProcessResult(FOUND, tickets);
-                } else {
-                    return ProcessResult(NOT_FOUND, std::nullopt);
-                }
+                processCountingFound(tickets, ticketCounter);
             }
             case COUNTING_WAIT:
                 return ProcessResult(WAIT, Response(std::get<std::string>(countingResult.second.value())));
