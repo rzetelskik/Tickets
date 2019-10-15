@@ -45,13 +45,13 @@ namespace {
     using SelectedTickets = std::vector<std::string>;
     using TicketIterator = std::_Rb_tree_const_iterator<std::pair<const std::pair<ulong, std::string>, unsigned long long>>;
     using IteratingInfo = std::pair<unsigned long long, ValidTime>;
-    
+
     enum TicketStatus {
         NEW_BEST,
         TOO_EXPENSIVE,
         TOO_SHORT
     };
-    
+
     using TicketSelectingResult = std::pair<TicketStatus, IteratingInfo>;
 
     enum ResponseType {
@@ -65,7 +65,7 @@ namespace {
     using Response = std::variant<std::string, std::vector<std::string>>;
     using ProcessResult = std::pair<ResponseType, std::optional<Response>>;
 
-    RequestType getRequestType(const std::string &line) {
+    RequestType getRequestType(const std::string& line) {
         if (line.empty()) {
             return IGNORE;
         }
@@ -90,16 +90,16 @@ namespace {
         return ParseResult(ERROR_REQ, std::nullopt);
     }
 
-    bool isStopTimeCorrect(StopTime stopTime, StopTime prevStopTime) {
+    inline bool isStopTimeCorrect(StopTime stopTime, StopTime prevStopTime) {
         static const int minutesLowerBound = 355, minutesUpperBound = 1281;
         return (stopTime > prevStopTime && stopTime >= minutesLowerBound && stopTime <= minutesUpperBound);
     }
 
-    bool isStopRepeated(const std::string &stopName, const Route &route) {
+    inline bool isStopRepeated(const std::string& stopName, const Route& route) {
         return (route.find(stopName) != route.end());
     }
 
-    std::optional<StopTime> getRouteStopTime(const std::string& strHour, const std::string& strMinute) {
+    inline std::optional<StopTime> getRouteStopTime(const std::string& strHour, const std::string& strMinute) {
         try {
             return 60 * stoul(strHour) + stoul(strMinute);
         } catch (std::exception& e) {
@@ -107,23 +107,24 @@ namespace {
         }
     }
 
-    std::optional<Route> parseRouteStops(const std::string& str, const std::string& rgxHour,
-            const std::string& rgxMinute, const std::string& rgxStopName) {
-        static const int rgxHourGroupPos = 1, rgxMinuteGroupPos = 2, rgxStopNameGroupPos = 3;
+    std::optional<Route>
+    parseRouteStops(const std::string& str, const std::string& rgxHour, const std::string& rgxMinute,
+                    const std::string& rgxStopName) {
+        static const size_t rgxHourGroupPos = 1, rgxMinuteGroupPos = 2, rgxStopNameGroupPos = 3;
         Route route;
         StopTime prevStopTime = 0;
 
         std::regex rgx(" (" + rgxHour + "):(" + rgxMinute + ") (" + rgxStopName + ")");
-        for (auto it = std::sregex_iterator(str.begin(), str.end(), rgx); it != std::sregex_iterator(); ++it) {
+        for (auto it = std::sregex_iterator(str.begin(), str.end(), rgx); it != std::sregex_iterator(); ++ it) {
             std::smatch match = *it;
 
-            const std::string &stopName = match.str(rgxStopNameGroupPos);
+            const std::string& stopName = match.str(rgxStopNameGroupPos);
             if (isStopRepeated(stopName, route)) {
                 return std::nullopt;
             }
 
             auto stopTime = getRouteStopTime(match.str(rgxHourGroupPos), match.str(rgxMinuteGroupPos));
-            if (!stopTime.has_value() || !isStopTimeCorrect(stopTime.value(), prevStopTime)) {
+            if (! stopTime.has_value() || ! isStopTimeCorrect(stopTime.value(), prevStopTime)) {
                 return std::nullopt;
             }
 
@@ -134,32 +135,29 @@ namespace {
         return route;
     }
 
-    ParseResult parseAddRoute(const std::string &line) {
-        static const std::string rgxLineNum = R"(\d+)";
-        static const std::string rgxHour = R"([5-9]|1\d|2[0-1])";
-        static const std::string rgxMinute = R"([0-5]\d)";
-        static const std::string rgxStopName = R"([a-zA-Z^_]+)";
-        static const int rgxLineGroupPos = 1, rgxIterGroupPos = 2;
+    ParseResult parseAddRoute(const std::string& line) {
+        static const std::string rgxLineNum = R"(\d+)", rgxHour = R"([5-9]|1\d|2[0-1])", rgxMinute = R"([0-5]\d)",
+            rgxStopName = R"([a-zA-Z^_]+)";
+        static const size_t rgxLineGroupPos = 1, rgxIterGroupPos = 2;
 
         std::regex rgx("^(" + rgxLineNum + ")((?: (?:" + rgxHour + "):" + rgxMinute + " " + rgxStopName + ")+)$");
-//        std::regex rgx(R"(^(\d+)((?: (?:[5-9]|1\d|2[0-1]):[0-5]\d [a-zA-Z^_]+)+)$)");
         std::smatch match;
 
-        if (!std::regex_match(line, match, rgx)) {
+        if (! std::regex_match(line, match, rgx)) {
             return parseError();
         }
 
         LineNum lineNum = stoull(match.str(rgxLineGroupPos));
 
         auto route = parseRouteStops(match.str(rgxIterGroupPos), rgxHour, rgxMinute, rgxStopName);
-        if (!route.has_value()) {
+        if (! route.has_value()) {
             return parseError();
         }
 
         return ParseResult(ADD_ROUTE, AddRoute(lineNum, route.value()));
     }
 
-    bool isPriceCorrect(Price price) {
+    inline bool isPriceCorrect(Price price) {
         return (price > 0.00);
     }
 
@@ -182,30 +180,28 @@ namespace {
         }
     }
 
-    ParseResult parseAddTicket(const std::string &line) {
-        static const std::string rgxTicketName = R"(([a-zA-Z ]+))";
-        static const std::string rgxTicketPrice = R"((\d+)\.(\d{2}))";
-        static const std::string rgxTicketTime = R"(([1-9]\d*))";
-        static const int rgxTicketNamePos = 1, rgxTicketPriceIntegerPos = 2,
-        rgxTicketPriceDecimalPos = 3, rgxTicketTimePos = 4;
+    ParseResult parseAddTicket(const std::string& line) {
+        static const std::string rgxTicketName = R"(([a-zA-Z ]+))", rgxTicketPrice = R"((\d+)\.(\d{2}))",
+            rgxTicketTime = R"(([1-9]\d*))";
+        static const size_t rgxTicketNamePos = 1, rgxTicketPriceIntegerPos = 2, rgxTicketPriceDecimalPos = 3,
+            rgxTicketTimePos = 4;
 
         std::regex rgx("^" + rgxTicketName + " " + rgxTicketPrice + " " + rgxTicketTime + "$");
-//        std::regex rgx(R"(^([a-zA-Z ]+) (\d+)\.(\d{2}) ([1-9]\d*)$)");
         std::smatch match;
 
-        if (!std::regex_match(line, match, rgx)) {
+        if (! std::regex_match(line, match, rgx)) {
             return parseError();
         }
 
         std::string name = match.str(rgxTicketNamePos);
 
         auto price = getFullPrice(match.str(rgxTicketPriceIntegerPos), match.str(rgxTicketPriceDecimalPos));
-        if (!price.has_value() || !isPriceCorrect(price.value())) {
+        if (! price.has_value() || ! isPriceCorrect(price.value())) {
             return parseError();
         }
 
         auto validTime = getTicketTime(match.str(rgxTicketTimePos));
-        if (!validTime.has_value()) {
+        if (! validTime.has_value()) {
             return parseError();
         }
 
@@ -213,27 +209,28 @@ namespace {
         return ParseResult(ADD_TICKET, Request(addTicket));
     }
 
-    std::optional<StopTime> getQueryStopTime(const std::string& strStopTime) {
+    inline std::optional<StopTime> getQueryStopTime(const std::string& strStopTime) {
         try {
             return std::stoul(strStopTime);
-        } catch (std::exception &e) {
+        } catch (std::exception& e) {
             return std::nullopt;
         }
     }
 
-    std::optional<Query> parseQueryStops(const std::string& str, const std::string& rgxStopName, const std::string& rgxStopTime) {
-        static const int rgxStopNamePos = 1, rgxStopTimePos = 2;
-
+    std::optional<Query> parseQueryStops(const std::string& str, const std::string& rgxStopName,
+            const std::string& rgxStopTime) {
+        static const size_t rgxStopNamePos = 1, rgxStopTimePos = 2;
         Query query;
+
         std::regex rgx(" (" + rgxStopName + ") (" + rgxStopTime + ")");
         for (auto it = std::sregex_iterator(str.begin(), str.end(), rgx);
-             it != std::sregex_iterator(); ++it) {
+             it != std::sregex_iterator(); ++ it) {
             std::smatch match = *it;
 
             std::string name = match.str(rgxStopNamePos);
 
             auto stopTime = getQueryStopTime(match.str(rgxStopTimePos));
-            if (!stopTime.has_value()) {
+            if (! stopTime.has_value()) {
                 return std::nullopt;
             }
 
@@ -244,33 +241,30 @@ namespace {
         return query;
     }
 
-    ParseResult parseQuery(const std::string &line) {
-        static const std::string rgxQueryChar = R"(\?)";
-        static const std::string rgxStopName = R"([a-zA-Z^_]+)";
-        static const std::string rgxStopTime = R"(\d+)";
-        static const int rgxIterStrPos = 1;
+    ParseResult parseQuery(const std::string& line) {
+        static const std::string rgxQueryChar = R"(\?)", rgxStopName = R"([a-zA-Z^_]+)", rgxStopTime = R"(\d+)";
+        static const size_t rgxIterStrPos = 1;
 
         std::regex rgx("^" + rgxQueryChar + "((?: " + rgxStopName + " " + rgxStopTime + ")+) (" + rgxStopName + ")$");
-//        std::regex rgx(R"(^\?((?: [a-zA-Z^_]+ \d+)+) ([a-zA-Z^_]+)$)");
         std::smatch match;
 
-        if (!std::regex_match(line, match, rgx)) {
+        if (! std::regex_match(line, match, rgx)) {
             return parseError();
         }
 
         auto query = parseQueryStops(match.str(rgxIterStrPos), rgxStopName, rgxStopTime);
-        if (!query.has_value()) {
+        if (! query.has_value()) {
             return parseError();
         }
 
-        int rgxLasStopNamePos = match.size() - 1;
+        size_t rgxLasStopNamePos = match.size() - 1;
         QueryStop queryStop = {match.str(rgxLasStopNamePos), 0};
         query.value().push_back(queryStop);
 
         return ParseResult(QUERY, query.value());
     }
 
-    ParseResult parseInputLine(const std::string &line) {
+    ParseResult parseInputLine(const std::string& line) {
         switch (getRequestType(line)) {
             case ADD_ROUTE:
                 return parseAddRoute(line);
@@ -288,42 +282,42 @@ namespace {
     }
 
     SectionCheckResult checkSection(const std::string& from, const std::string& to, const Route& line,
-        StopTime& arrivalTime) {
+            StopTime& arrivalTime) {
         auto startStop = line.find(from);
         auto endStop = line.find(to);
 
         if (startStop == line.end() || endStop == line.end()) {
             return SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
-        } else if(startStop->second > endStop->second) {
+        } else if (startStop->second > endStop->second) {
             return SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
-        } else if(arrivalTime != 0 && arrivalTime != startStop->second) {
+        } else if (arrivalTime != 0 && arrivalTime != startStop->second) {
             return (startStop->second > arrivalTime)
-                ? SectionCheckResult(COUNTING_WAIT, std::nullopt)
-                : SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
+                   ? SectionCheckResult(COUNTING_WAIT, std::nullopt)
+                   : SectionCheckResult(COUNTING_NOT_FOUND, std::nullopt);
         } else {
             arrivalTime = endStop->second;
             return SectionCheckResult(COUNTING_FOUND, std::pair(startStop->second, endStop->second));
         }
     }
 
-    CountingResult countTime(const Query &tour, const Timetable &timeTable) {
+    CountingResult countTime(const Query& tour, const Timetable& timetable) {
         StopTime arrivalTime = 0;
         StopTime startTime = 0;
         StopTime endTime = 0;
 
-        for (std::size_t i = 0; i < tour.size() - 1; i++) {
-            auto &current = tour[i];
-            auto &next = tour[i + 1];
+        for (std::size_t i = 0; i < tour.size() - 1; i ++) {
+            auto& current = tour[i];
+            auto& next = tour[i + 1];
 
-            const auto &currentName = current.first;
-            const auto &nextName = next.first;
+            const auto& currentName = current.first;
+            const auto& nextName = next.first;
 
-            auto result = checkSection(currentName, nextName, timeTable.at(current.second), arrivalTime);
+            auto result = checkSection(currentName, nextName, timetable.at(current.second), arrivalTime);
             switch (result.first) {
                 case COUNTING_NOT_FOUND:
-                    return  CountingResult(COUNTING_NOT_FOUND, std::nullopt);
+                    return CountingResult(COUNTING_NOT_FOUND, std::nullopt);
                 case COUNTING_WAIT:
-                    return  CountingResult(COUNTING_WAIT, currentName);
+                    return CountingResult(COUNTING_WAIT, currentName);
                 case COUNTING_FOUND:
                     if (i == 0)
                         startTime = result.second->first;
@@ -336,8 +330,9 @@ namespace {
         return CountingResult(COUNTING_FOUND, CountingInfo(endTime - startTime));
     }
 
-    TicketSelectingResult checkTicket(StopTime totalTime, const TicketIterator& it, IteratingInfo info, unsigned long long minPrice) {
-        const auto &key = it->first;
+    TicketSelectingResult checkTicket(StopTime totalTime, const TicketIterator& it, IteratingInfo info,
+            unsigned long long minPrice) {
+        const auto& key = it->first;
         auto price = key.first;
         auto time = it->second;
 
@@ -375,8 +370,8 @@ namespace {
     void select3rdTicket(const TicketSortedMap& tickets, StopTime totalTime, SelectedTickets& bestTickets,
                          unsigned long long& minPrice, const TicketIterator& it, const IteratingInfo& prev,
                          const std::string& nameA, const std::string& nameB) {
-        for (auto itC = it; itC != tickets.cend(); itC++) {
-            const auto &name = itC->first.second;
+        for (auto itC = it; itC != tickets.cend(); itC ++) {
+            const auto& name = itC->first.second;
 
             auto result = checkTicket(totalTime, itC, prev, minPrice);
             auto updateResult = updateLoop(result);
@@ -385,7 +380,7 @@ namespace {
                 minPrice = result.second.first;
                 bestTickets = {nameA, nameB, name};
             }
-            if(updateResult.second) {
+            if (updateResult.second) {
                 break;
             }
         }
@@ -413,13 +408,12 @@ namespace {
     }
 
 
-    SelectedTickets selectTickets(const TicketSortedMap &tickets, StopTime totalTime) {
+    SelectedTickets selectTickets(const TicketSortedMap& tickets, StopTime totalTime) {
         unsigned long long minPrice = ULLONG_MAX;
         SelectedTickets bestTickets;
 
-        //tickets are sorted ascending by price
-        for (auto it = tickets.cbegin(); it != tickets.cend(); it++) {
-            const auto &name = it->first.second;
+        for (auto it = tickets.cbegin(); it != tickets.cend(); it ++) {
+            const auto& name = it->first.second;
 
             auto result = checkTicket(totalTime, it, IteratingInfo(0, 0), minPrice);
             auto updateResult = updateLoop(result);
@@ -428,10 +422,10 @@ namespace {
                 minPrice = result.second.first;
                 bestTickets = {name};
             }
-            if(updateResult.second) {
+            if (updateResult.second) {
                 break;
             }
-            
+
             select2ndTicket(tickets, totalTime, bestTickets, minPrice, it, result.second, name);
         }
 
@@ -446,11 +440,11 @@ namespace {
         return ProcessResult(NO_RESPONSE, std::nullopt);
     }
 
-    bool isLineRepeated(const LineNum &lineNum, const Timetable &timetable) {
+    bool isLineRepeated(const LineNum& lineNum, const Timetable& timetable) {
         return (timetable.find(lineNum) != timetable.end());
     }
 
-    ProcessResult processAddRoute(const AddRoute &addRoute, Timetable &timetable) {
+    ProcessResult processAddRoute(const AddRoute& addRoute, Timetable& timetable) {
         if (isLineRepeated(addRoute.first, timetable)) {
             return processError();
         }
@@ -460,12 +454,12 @@ namespace {
         return ProcessResult(NO_RESPONSE, std::nullopt);
     }
 
-    bool isTicketNameRepeated(const std::string &ticketName, const TicketMap &ticketMap) {
+    bool isTicketNameRepeated(const std::string& ticketName, const TicketMap& ticketMap) {
         return (ticketMap.find(ticketName) != ticketMap.end());
     }
 
-    void insertTicket(const AddTicket &addTicket, TicketMap &ticketMap, TicketSortedMap &ticketSortedMap) {
-        const std::string &name = addTicket.first;
+    void insertTicket(const AddTicket& addTicket, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap) {
+        const std::string& name = addTicket.first;
         Price price = addTicket.second.first;
         ValidTime validTime = addTicket.second.second;
 
@@ -473,8 +467,8 @@ namespace {
         ticketSortedMap.insert({{price, name}, validTime});
     }
 
-    ProcessResult processAddTicket(const AddTicket &addTicket, TicketMap &ticketMap, TicketSortedMap &ticketSortedMap) {
-        const std::string &ticketName = std::get<0>(addTicket);
+    ProcessResult processAddTicket(const AddTicket& addTicket, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap) {
+        const std::string& ticketName = std::get<0>(addTicket);
         if (isTicketNameRepeated(ticketName, ticketMap)) {
             return processError();
         }
@@ -485,7 +479,7 @@ namespace {
     }
 
     ProcessResult processCountingFound(SelectedTickets& tickets, unsigned int& ticketCounter) {
-        if (!tickets.empty()) {
+        if (! tickets.empty()) {
             ticketCounter += tickets.size();
             return ProcessResult(FOUND, tickets);
         } else {
@@ -493,13 +487,14 @@ namespace {
         }
     }
 
-    ProcessResult processQuery(const Query &query, Timetable &timetable, TicketSortedMap &ticketMap, unsigned int &ticketCounter) {
+    ProcessResult processQuery(const Query& query, Timetable& timetable,TicketSortedMap& ticketMap,
+            unsigned int& ticketCounter) {
         auto countingResult = countTime(query, timetable);
 
         switch (countingResult.first) {
-            case COUNTING_FOUND:
-            {
-                SelectedTickets tickets = selectTickets(ticketMap, std::get<StopTime>(countingResult.second.value_or(0)));
+            case COUNTING_FOUND: {
+                SelectedTickets tickets = selectTickets(ticketMap,
+                        std::get<StopTime>(countingResult.second.value_or(0)));
                 return processCountingFound(tickets, ticketCounter);
             }
             case COUNTING_WAIT:
@@ -511,15 +506,15 @@ namespace {
         return ProcessResult(NOT_FOUND, std::nullopt);
     }
 
-    ProcessResult processRequest(const ParseResult &parseResult, TicketMap &ticketMap, TicketSortedMap &ticketSortedMap,
-                                 Timetable &timetable, uint &ticketCounter) {
+    ProcessResult processRequest(const ParseResult& parseResult, TicketMap& ticketMap, TicketSortedMap& ticketSortedMap,
+            Timetable& timetable, uint& ticketCounter) {
         switch (parseResult.first) {
             case ADD_ROUTE:
                 return processAddRoute(std::get<AddRoute>(parseResult.second.value()), timetable);
             case ADD_TICKET:
                 return processAddTicket(std::get<AddTicket>(parseResult.second.value()), ticketMap, ticketSortedMap);
             case QUERY:
-                return processQuery(std::get<Query>(parseResult.second.value()), timetable, 
+                return processQuery(std::get<Query>(parseResult.second.value()), timetable,
                                     ticketSortedMap, ticketCounter);
             case IGNORE:
                 return processNoResponse();
@@ -529,23 +524,23 @@ namespace {
         return processError();
     }
 
-    void printFound(const std::vector<std::string> &tickets) {
+    void printFound(const std::vector<std::string>& tickets) {
         bool first = true;
-        
+
         std::cout << "! ";
-        for (auto &ticket: tickets) {
-            if (!first) {
+        for (auto& ticket: tickets) {
+            if (! first) {
                 std::cout << "; ";
             } else {
                 first = false;
             }
-            
+
             std::cout << ticket;
         }
         std::cout << std::endl;
     }
 
-    void printWait(const std::string &stop) {
+    void printWait(const std::string& stop) {
         std::cout << ":-( " << stop << std::endl;
     }
 
@@ -553,11 +548,11 @@ namespace {
         std::cout << ":-|" << std::endl;
     }
 
-    void printError(const std::string &inputLine, unsigned int lineCounter) {
+    void printError(const std::string& inputLine, unsigned int lineCounter) {
         std::cerr << "Error in line " << lineCounter << ": " << inputLine << std::endl;
     }
 
-    void printOutput(const ProcessResult &processResult, const std::string &inputLine, unsigned int lineCounter) {
+    void printOutput(const ProcessResult& processResult, const std::string& inputLine, unsigned int lineCounter) {
         switch (processResult.first) {
             case FOUND:
                 return printFound(std::get<std::vector<std::string>>(processResult.second.value()));
@@ -575,7 +570,6 @@ namespace {
     void printTicketCount(unsigned int ticketCounter) {
         std::cout << ticketCounter << std::endl;
     }
-
 }
 
 int main() {
@@ -594,7 +588,7 @@ int main() {
         ParseResult parseResult = parseInputLine(buffer);
         ProcessResult processResult = processRequest(parseResult, ticketMap, ticketSortedMap, timetable, ticketCounter);
         printOutput(processResult, buffer, lineCounter);
-        lineCounter++;
+        lineCounter ++;
     }
     printTicketCount(ticketCounter);
 
