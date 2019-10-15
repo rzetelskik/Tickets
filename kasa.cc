@@ -416,14 +416,13 @@ namespace {
         auto countingResult = countTime(query, timetable);
 
         switch (countingResult.first) {
-            case COUNTING_FOUND: {
-                auto tickets = selectTickets(ticketMap, std::get<StopTime>(countingResult.second.value_or(0)));
-                processCountingFound(tickets, ticketCounter);
-            }
+            case COUNTING_FOUND:
+                SelectedTickets tickets = selectTickets(ticketMap, std::get<StopTime>(countingResult.second.value_or(0)));
+                return processCountingFound(tickets, ticketCounter);
             case COUNTING_WAIT:
                 return ProcessResult(WAIT, Response(std::get<std::string>(countingResult.second.value())));
-            case COUNTING_NOT_FOUND:
-                return ProcessResult(NOT_FOUND, std::nullopt);
+            default:
+                break;
         }
 
         return ProcessResult(NOT_FOUND, std::nullopt);
@@ -437,8 +436,8 @@ namespace {
             case ADD_TICKET:
                 return processAddTicket(std::get<AddTicket>(parseResult.second.value()), ticketMap, ticketSortedMap);
             case QUERY:
-                return processQuery(std::get<Query>(parseResult.second.value()), timetable, ticketSortedMap,
-                                    ticketCounter);
+                return processQuery(std::get<Query>(parseResult.second.value()), timetable, 
+                                    ticketSortedMap, ticketCounter);
             case IGNORE:
                 return processNoResponse();
             default:
