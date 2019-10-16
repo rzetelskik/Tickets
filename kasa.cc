@@ -533,14 +533,14 @@ namespace {
         bool first = true;
 
         std::cout << "! ";
-        for (auto& ticket: tickets) {
+        for (auto it = tickets.crbegin(); it != tickets.crend(); it++) {
             if (! first) {
                 std::cout << "; ";
             } else {
                 first = false;
             }
 
-            std::cout << ticket;
+            std::cout << *it;
         }
         std::cout << std::endl;
     }
