@@ -9,20 +9,33 @@
 #include <climits>
 
 namespace {
+    // Ticket's price.
     using Price = unsigned long;
+    // Ticket's validity time.
     using ValidTime = unsigned long long;
+    // Map of tickets allowing for accessing its price by its name.
     using TicketMap = std::unordered_map<std::string, Price>;
+    // Map of tickets sorted by price (ascending order).
     using TicketSortedMap = std::map<std::pair<Price, std::string>, ValidTime>;
+    // Tram's arrival time at a stop.
     using StopTime = unsigned long;
+    // Map of stops in a given route.
     using Route = std::unordered_map<std::string, StopTime>;
+    // Line number (id).
     using LineNum = unsigned long long;
+    // Map of routes.
     using Timetable = std::unordered_map<LineNum, Route>;
+    // A request to add a route to the timetable.
     using AddRoute = std::pair<LineNum, Route>;
+    // A request to add a ticket to the collection.
     using AddTicket = std::pair<std::string, std::pair<Price, ValidTime>>;
+    // A stop requested by passenger on a given line.
     using QueryStop = std::pair<std::string, LineNum>;
+    // A vector of all stops requested by passenger.
     using Query = std::vector<QueryStop>;
+    // Variant allowing for keeping every valid request.
     using Request = std::variant<AddRoute, AddTicket, Query>;
-
+    // Type of request (both valid or invalid).
     enum RequestType {
         ADD_ROUTE,
         ADD_TICKET,
@@ -30,30 +43,35 @@ namespace {
         IGNORE,
         ERROR_REQ
     };
-
+    // A parsing result - type of request and the request itself (if valid).
     using ParseResult = std::pair<RequestType, std::optional<Request>>;
-
-    enum CountingResultType {
-        COUNTING_FOUND,
-        COUNTING_WAIT,
-        COUNTING_ERR
+    // Type of travel time counting outcome (both valid or invalid).
+    enum TravelTimeResultType {
+        TRAVEL_TIME_FOUND,
+        TRAVEL_TIME_WAIT,
+        TRAVEL_TIME_ERR
     };
-
-    using CountingInfo = std::variant<StopTime, std::string>;
-    using CountingResult = std::pair<CountingResultType, std::optional<CountingInfo>>;
-    using SectionCheckResult = std::pair<CountingResultType, std::optional<std::pair<StopTime, StopTime>>>;
+    // Variant allowing for keeping additional info for a response to query.
+    using TravelTimeInfo = std::variant<StopTime, std::string>;
+    // A travel time counting result - type of travel time counting result and additional info (if valid result).
+    using TravelTimeCountingResult = std::pair<TravelTimeResultType, std::optional<TravelTimeInfo>>;
+    // A section's validity check result - type of travel time counting result and start time/stop time (if valid).
+    using SectionCheckResult = std::pair<TravelTimeResultType, std::optional<std::pair<StopTime, StopTime>>>;
+    // A vector of tickets selected for a journey.
     using SelectedTickets = std::vector<std::string>;
-    using TicketIterator = std::_Rb_tree_const_iterator<std::pair<const std::pair<ulong, std::string>, unsigned long long>>;
-    using IteratingInfo = std::pair<unsigned long long, ValidTime>;
-
+    // Ticket iterator, used for iterating over a ticket map.
+    using TicketIterator = std::_Rb_tree_const_iterator<std::pair<const std::pair<Price, std::string>, unsigned long long>>;
+    // Up to date information (collective price, collective time) in a given iteration.
+    using TicketIteratingInfo = std::pair<unsigned long long, ValidTime>;
+    // Status of a given set of tickets in regard to the current best set.
     enum TicketStatus {
         NEW_BEST,
         TOO_EXPENSIVE,
         TOO_SHORT
     };
-
-    using TicketSelectingResult = std::pair<TicketStatus, IteratingInfo>;
-
+    // A ticket selection result - ticket set's status and the information about it.
+    using TicketSelectionResult = std::pair<TicketStatus, TicketIteratingInfo>;
+    // Type of a response to a request (both valid or invalid).
     enum ResponseType {
         FOUND,
         WAIT,
@@ -61,8 +79,9 @@ namespace {
         NO_RESPONSE,
         ERROR_RESP
     };
-
+    // Variant allowing for containing a response to a valid request.
     using Response = std::variant<std::string, std::vector<std::string>>;
+    // A processing result - type of response and a response itself (if request was valid).
     using ProcessResult = std::pair<ResponseType, std::optional<Response>>;
 
     RequestType getRequestType(const std::string& line) {
@@ -82,11 +101,11 @@ namespace {
         }
     }
 
-    ParseResult parseIgnore() {
+    inline ParseResult parseIgnore() {
         return ParseResult(IGNORE, std::nullopt);
     }
 
-    ParseResult parseError() {
+    inline ParseResult parseError() {
         return ParseResult(ERROR_REQ, std::nullopt);
     }
 
@@ -107,9 +126,8 @@ namespace {
         }
     }
 
-    std::optional<Route>
-    parseRouteStops(const std::string& str, const std::string& rgxHour, const std::string& rgxMinute,
-                    const std::string& rgxStopName) {
+    std::optional<Route> parseRouteStops(const std::string& str, const std::string& rgxHour,
+            const std::string& rgxMinute, const std::string& rgxStopName) {
         static const size_t rgxHourGroupPos = 1, rgxMinuteGroupPos = 2, rgxStopNameGroupPos = 3;
         Route route;
         StopTime prevStopTime = 0;
@@ -163,10 +181,7 @@ namespace {
 
     inline std::optional<Price> getFullPrice(const std::string& strIntegerPart, const std::string& strDecimalPart) {
         try {
-            Price integerPart = std::stoul(strIntegerPart);
-            Price decimalPart = std::stoul(strDecimalPart);
-
-            return 100 * integerPart + decimalPart;
+            return 100 * std::stoul(strIntegerPart) + std::stoul(strDecimalPart);
         } catch (std::exception& e) {
             return std::nullopt;
         }
@@ -287,20 +302,19 @@ namespace {
         auto endStop = line.find(to);
 
         if (startStop == line.end() || endStop == line.end()) {
-            return SectionCheckResult(COUNTING_ERR, std::nullopt);
+            return SectionCheckResult(TRAVEL_TIME_ERR, std::nullopt);
         } else if (startStop->second > endStop->second) {
-            return SectionCheckResult(COUNTING_ERR, std::nullopt);
+            return SectionCheckResult(TRAVEL_TIME_ERR, std::nullopt);
         } else if (arrivalTime != 0 && arrivalTime != startStop->second) {
-            return (startStop->second > arrivalTime)
-                   ? SectionCheckResult(COUNTING_WAIT, std::nullopt)
-                   : SectionCheckResult(COUNTING_ERR, std::nullopt);
+            return (startStop->second > arrivalTime) ? SectionCheckResult(TRAVEL_TIME_WAIT, std::nullopt)
+                : SectionCheckResult(TRAVEL_TIME_ERR, std::nullopt);
         } else {
             arrivalTime = endStop->second;
-            return SectionCheckResult(COUNTING_FOUND, std::pair(startStop->second, endStop->second));
+            return SectionCheckResult(TRAVEL_TIME_FOUND, std::pair(startStop->second, endStop->second));
         }
     }
 
-    CountingResult countTime(const Query& tour, const Timetable& timetable) {
+    TravelTimeCountingResult countTravelTime(const Query& tour, const Timetable& timetable) {
         StopTime arrivalTime = 0;
         StopTime startTime = 0;
         StopTime endTime = 0;
@@ -314,29 +328,29 @@ namespace {
 
             const auto& line = timetable.find(current.second);
             if(line == timetable.end()) {
-                return CountingResult(COUNTING_ERR, std::nullopt);
+                return TravelTimeCountingResult(TRAVEL_TIME_ERR, std::nullopt);
             }
 
             auto result = checkSection(currentName, nextName, line->second, arrivalTime);
             switch (result.first) {
-                case COUNTING_WAIT:
-                    return CountingResult(COUNTING_WAIT, currentName);
-                case COUNTING_FOUND:
+                case TRAVEL_TIME_WAIT:
+                    return TravelTimeCountingResult(TRAVEL_TIME_WAIT, currentName);
+                case TRAVEL_TIME_FOUND:
                     if (i == 0)
                         startTime = result.second->first;
                     if (i == tour.size() - 2)
                         endTime = result.second->second;
                     break;
-                case COUNTING_ERR:
-                    return CountingResult(COUNTING_ERR, std::nullopt);
+                case TRAVEL_TIME_ERR:
+                    return TravelTimeCountingResult(TRAVEL_TIME_ERR, std::nullopt);
             }
         }
 
-        return CountingResult(COUNTING_FOUND, CountingInfo(endTime - startTime));
+        return TravelTimeCountingResult(TRAVEL_TIME_FOUND, TravelTimeInfo(endTime - startTime));
     }
 
-    TicketSelectingResult checkTicket(StopTime totalTime, const TicketIterator& it, IteratingInfo info,
-            unsigned long long minPrice) {
+    TicketSelectionResult compareTicket(StopTime totalTime, const TicketIterator& it, TicketIteratingInfo info,
+                                        unsigned long long minPrice) {
         const auto& key = it->first;
         auto price = key.first;
         auto time = it->second;
@@ -346,14 +360,14 @@ namespace {
 
         if (currentTime > totalTime) {
             if (currentPrice <= minPrice) {
-                return TicketSelectingResult(NEW_BEST, IteratingInfo(currentPrice, currentTime));
+                return TicketSelectionResult(NEW_BEST, TicketIteratingInfo(currentPrice, currentTime));
             }
-            return TicketSelectingResult(TOO_EXPENSIVE, IteratingInfo(currentPrice, currentTime));
+            return TicketSelectionResult(TOO_EXPENSIVE, TicketIteratingInfo(currentPrice, currentTime));
         }
-        return TicketSelectingResult(TOO_SHORT, IteratingInfo(currentPrice, currentTime));
+        return TicketSelectionResult(TOO_SHORT, TicketIteratingInfo(currentPrice, currentTime));
     }
 
-    std::pair<bool, bool> updateLoop(TicketSelectingResult& result) {
+    std::pair<bool, bool> updateTicketSelectionLoop(TicketSelectionResult& result) {
         bool breakLoop = false;
         bool updateBestTickets = false;
 
@@ -373,13 +387,13 @@ namespace {
     }
 
     void select3rdTicket(const TicketSortedMap& tickets, StopTime totalTime, SelectedTickets& bestTickets,
-                         unsigned long long& minPrice, const TicketIterator& it, const IteratingInfo& prev,
-                         const std::string& nameA, const std::string& nameB) {
+            unsigned long long& minPrice, const TicketIterator& it, const TicketIteratingInfo& prev,
+            const std::string& nameA, const std::string& nameB) {
         for (auto itC = it; itC != tickets.cend(); itC ++) {
             const auto& name = itC->first.second;
 
-            auto result = checkTicket(totalTime, itC, prev, minPrice);
-            auto updateResult = updateLoop(result);
+            auto result = compareTicket(totalTime, itC, prev, minPrice);
+            auto updateResult = updateTicketSelectionLoop(result);
 
             if(updateResult.first) {
                 minPrice = result.second.first;
@@ -392,13 +406,13 @@ namespace {
     }
 
     void select2ndTicket(const TicketSortedMap& tickets, StopTime totalTime, SelectedTickets& bestTickets,
-                         unsigned long long& minPrice, const TicketIterator& it, const IteratingInfo& prev,
-                         const std::string& nameA) {
+            unsigned long long& minPrice, const TicketIterator& it, const TicketIteratingInfo& prev,
+            const std::string& nameA) {
         for (auto itB = it; itB != tickets.cend(); itB++) {
             const auto &name = itB->first.second;
 
-            auto result = checkTicket(totalTime, itB, prev, minPrice);
-            auto updateResult = updateLoop(result);
+            auto result = compareTicket(totalTime, itB, prev, minPrice);
+            auto updateResult = updateTicketSelectionLoop(result);
 
             if(updateResult.first) {
                 minPrice = result.second.first;
@@ -420,8 +434,8 @@ namespace {
         for (auto it = tickets.cbegin(); it != tickets.cend(); it ++) {
             const auto& name = it->first.second;
 
-            auto result = checkTicket(totalTime, it, IteratingInfo(0, 0), minPrice);
-            auto updateResult = updateLoop(result);
+            auto result = compareTicket(totalTime, it, TicketIteratingInfo(0, 0), minPrice);
+            auto updateResult = updateTicketSelectionLoop(result);
 
             if(updateResult.first) {
                 minPrice = result.second.first;
@@ -437,15 +451,15 @@ namespace {
         return bestTickets;
     }
 
-    ProcessResult processError() {
+    inline ProcessResult processError() {
         return ProcessResult(ERROR_RESP, std::nullopt);
     }
 
-    ProcessResult processNoResponse() {
+    inline ProcessResult processNoResponse() {
         return ProcessResult(NO_RESPONSE, std::nullopt);
     }
 
-    bool isLineRepeated(const LineNum& lineNum, const Timetable& timetable) {
+    inline bool isLineRepeated(const LineNum& lineNum, const Timetable& timetable) {
         return (timetable.find(lineNum) != timetable.end());
     }
 
@@ -459,7 +473,7 @@ namespace {
         return ProcessResult(NO_RESPONSE, std::nullopt);
     }
 
-    bool isTicketNameRepeated(const std::string& ticketName, const TicketMap& ticketMap) {
+    inline bool isTicketNameRepeated(const std::string& ticketName, const TicketMap& ticketMap) {
         return (ticketMap.find(ticketName) != ticketMap.end());
     }
 
@@ -484,7 +498,7 @@ namespace {
     }
 
     ProcessResult processCountingFound(SelectedTickets& tickets, unsigned int& ticketCounter) {
-        if (! tickets.empty()) {
+        if (!tickets.empty()) {
             ticketCounter += tickets.size();
             return ProcessResult(FOUND, tickets);
         } else {
@@ -494,17 +508,17 @@ namespace {
 
     ProcessResult processQuery(const Query& query, Timetable& timetable,TicketSortedMap& ticketMap,
             unsigned int& ticketCounter) {
-        auto countingResult = countTime(query, timetable);
+        auto countingResult = countTravelTime(query, timetable);
 
         switch (countingResult.first) {
-            case COUNTING_FOUND: {
+            case TRAVEL_TIME_FOUND: {
                 SelectedTickets tickets = selectTickets(ticketMap,
                         std::get<StopTime>(countingResult.second.value_or(0)));
                 return processCountingFound(tickets, ticketCounter);
             }
-            case COUNTING_WAIT:
+            case TRAVEL_TIME_WAIT:
                 return ProcessResult(WAIT, Response(std::get<std::string>(countingResult.second.value())));
-            case COUNTING_ERR:
+            case TRAVEL_TIME_ERR:
                 return ProcessResult(ERROR_RESP, std::nullopt);
         }
 
@@ -520,7 +534,7 @@ namespace {
                 return processAddTicket(std::get<AddTicket>(parseResult.second.value()), ticketMap, ticketSortedMap);
             case QUERY:
                 return processQuery(std::get<Query>(parseResult.second.value()), timetable,
-                                    ticketSortedMap, ticketCounter);
+                        ticketSortedMap, ticketCounter);
             case IGNORE:
                 return processNoResponse();
             default:
